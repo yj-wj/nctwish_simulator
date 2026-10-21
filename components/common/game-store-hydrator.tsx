@@ -4,19 +4,11 @@ import { useEffect } from "react";
 import { useGameStore } from "@/store/game-store";
 
 export function GameStoreHydrator() {
+  const saveError = useGameStore((state) => state.saveError);
   useEffect(() => {
-    let active = true;
-    const hydrate = async () => {
-      try {
-        await useGameStore.persist.rehydrate();
-      } finally {
-        if (active) useGameStore.getState().setHydrated(true);
-      }
-    };
-    void hydrate();
-    return () => { active = false; };
+    useGameStore.getState().initializePersistence();
   }, []);
 
-  return null;
+  return saveError ? <div className="global-save-error" role="alert">{saveError}</div> : null;
 }
 

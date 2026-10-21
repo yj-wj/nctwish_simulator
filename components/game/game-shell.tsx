@@ -18,7 +18,7 @@ export function GameShell({ children }: { children: ReactNode }) {
   const relationshipStage = getRelationshipStage(gameState.stats.affection);
   return <RouteGuard stage="game"><SiteHeader /><main id="main-content" className="game-shell">
     <div className="game-context"><div className="week-label"><CalendarDays size={17} /><strong>第 {gameState.week} 周</strong><span>CHAPTER 01</span></div><div className="context-details"><span><MapPin size={15} />{gameState.currentScene}</span><span>{character.name}（{character.displayName}）</span><span className="relationship-pill"><Heart size={13} />{relationshipStage.name}</span></div></div>
-    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 4B · Structured Memory 由正式结算写入；History / Story Flags 仍是权威游戏事实。</span></div>
+    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 4C · 本地多存档已启用；Derived Data 会在 Load 后由权威事实重新计算。</span></div>
     <RelationshipDebug />
     {children}
   </main><BottomNav /></RouteGuard>;

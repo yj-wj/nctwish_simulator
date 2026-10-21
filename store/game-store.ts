@@ -1,7 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
 import { eventPool } from "@/config/event-pool";
 import { getHistoryTestFixture } from "@/config/history-fixtures";
 import { initialStoryFlags } from "@/config/history";
@@ -12,11 +11,14 @@ import { evaluateAction } from "@/game/ruleEngine";
 import { processStructuredSettlement } from "@/game/settlementPipeline";
 import { setGameStateForDebug, settleChoice } from "@/game/stateEngine";
 import { mockStories } from "@/mocks/story";
+import { createLocalStorageAdapter } from "@/storage/localStorageAdapter";
+import { createSaveRepository, SaveRepositoryError, type SaveRepository } from "@/storage/saveRepository";
 import type { CharacterBoundaryId, CharacterId } from "@/types/character";
 import type { EventEngineResult, EventHistoryEntry } from "@/types/event";
 import type { GameModeId, GameState, PlayerDraft, StatId } from "@/types/game";
 import type { ChoiceHistoryRecord, StoryFlagState, WeeklyStateSnapshot } from "@/types/history";
 import type { MemoryRecord } from "@/types/memory";
+import type { GameSave, GameSaveData, SaveSummary } from "@/types/save";
 import type { StateChangeLogEntry } from "@/types/state";
 import type { ActionReceipt, StoryChoice } from "@/types/ui";
 
@@ -31,23 +33,6 @@ const initialDraft: PlayerDraft = {
 };
 
 const initialStoryUI = { storyIndex: 0, previousChoice: null, receipt: null, freeAction: "" };
-function normalizeEventHistory(value: unknown): EventHistoryEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((entry, index) => {
-    const legacy = entry as Partial<EventHistoryEntry>;
-    return {
-      recordId: legacy.recordId ?? `legacy:${legacy.week ?? 0}:${legacy.eventId ?? "unknown"}:${index}`,
-      eventId: legacy.eventId ?? "unknown",
-      week: legacy.week ?? 0,
-      category: legacy.category ?? "daily",
-      eventTags: legacy.eventTags ?? [],
-      outcomeTags: legacy.outcomeTags ?? [],
-      status: legacy.status ?? "selected",
-      settlementId: legacy.settlementId,
-      flagEffects: legacy.flagEffects ?? [],
-    };
-  });
-}
 
 const initialEventUI = {
   eventHistory: [] as EventHistoryEntry[],
@@ -63,7 +48,17 @@ const initialEventUI = {
   memories: [] as MemoryRecord[],
 };
 
-interface GameStore {
+let browserSaveRepository: SaveRepository | null = null;
+
+function getSaveRepository(): SaveRepository {
+  if (typeof window === "undefined") {
+    throw new SaveRepositoryError("storage_unavailable", "localStorage is unavailable on the server.");
+  }
+  browserSaveRepository ??= createSaveRepository(createLocalStorageAdapter(window.localStorage));
+  return browserSaveRepository;
+}
+
+export interface GameStore {
   draft: PlayerDraft;
   gameState: GameState | null;
   playerConfirmed: boolean;
@@ -85,6 +80,11 @@ interface GameStore {
   storyFlags: StoryFlagState;
   processedSettlementIds: string[];
   memories: MemoryRecord[];
+  activeSaveId: string | null;
+  activeSaveCreatedAt: string | null;
+  activeSaveUpdatedAt: string | null;
+  saveSummaries: SaveSummary[];
+  saveError: string | null;
   patchDraft: (draft: Partial<PlayerDraft>) => void;
   confirmPlayer: (draft: PlayerDraft) => void;
   selectCharacter: (id: CharacterId) => void;
@@ -100,19 +100,121 @@ interface GameStore {
   applyMockChoice: (eventId: string, choiceId: StoryChoice["id"], boundaryId?: CharacterBoundaryId) => void;
   applyHistoryTestFixture: (fixtureId: string) => void;
   generateNextMockEvent: () => void;
-  setHydrated: (hydrated: boolean) => void;
+  initializePersistence: () => void;
+  saveNow: () => boolean;
+  loadSave: (saveId: string) => boolean;
+  deleteSave: (saveId: string) => void;
+  startNewGame: () => void;
+  createTestSave: () => boolean;
   reset: () => void;
 }
 
-export const useGameStore = create<GameStore>()(
-  persist(
-    (set, get) => ({
+function getSaveData(state: GameStore): GameSaveData | null {
+  if (!state.gameState) return null;
+  return {
+    playerSetup: { ...state.draft },
+    gameState: {
+      ...state.gameState,
+      player: { ...state.gameState.player },
+      stats: { ...state.gameState.stats },
+    },
+    eventHistory: state.eventHistory,
+    choiceHistory: state.choiceHistory,
+    weeklyStateHistory: state.weeklyHistory,
+    storyFlags: { ...state.storyFlags },
+    memories: state.memories,
+    processedSettlementIds: state.processedSettlementIds,
+    runtime: {
+      playerConfirmed: state.playerConfirmed,
+      characterConfirmed: state.characterConfirmed,
+      entered: state.entered,
+      storyIndex: state.storyIndex,
+      previousChoice: state.previousChoice,
+      receipt: state.receipt,
+      selectedEventId: state.selectedEventId,
+      selectedEventRecordId: state.selectedEventRecordId,
+      eventSeed: state.eventSeed,
+    },
+  };
+}
+
+function saveToRuntime(save: GameSave): Partial<GameStore> {
+  return {
+    draft: save.playerSetup,
+    gameState: save.gameState,
+    playerConfirmed: save.runtime.playerConfirmed,
+    characterConfirmed: save.runtime.characterConfirmed,
+    entered: save.runtime.entered,
+    storyIndex: save.runtime.storyIndex,
+    previousChoice: save.runtime.previousChoice,
+    receipt: save.runtime.receipt,
+    freeAction: "",
+    eventHistory: save.eventHistory,
+    selectedEventId: save.runtime.selectedEventId,
+    selectedEventRecordId: save.runtime.selectedEventRecordId,
+    eventSeed: save.runtime.eventSeed,
+    eventEngineResult: null,
+    stateChangeLog: [],
+    weeklyHistory: save.weeklyStateHistory,
+    choiceHistory: save.choiceHistory,
+    storyFlags: save.storyFlags,
+    processedSettlementIds: save.processedSettlementIds,
+    memories: save.memories,
+    activeSaveId: save.saveId,
+    activeSaveCreatedAt: save.createdAt,
+    activeSaveUpdatedAt: save.updatedAt,
+    saveError: null,
+  };
+}
+
+export const useGameStore = create<GameStore>()((set, get) => {
+  const persistCurrentState = (): boolean => {
+    const state = get();
+    const data = getSaveData(state);
+    if (!data) return false;
+    try {
+      const repository = getSaveRepository();
+      const saveId = state.activeSaveId ?? data.gameState.gameId;
+      let saved: GameSave;
+      try {
+        const existing = repository.loadGame(saveId);
+        saved = repository.saveGame({ ...existing, ...data });
+      } catch (error) {
+        if (!(error instanceof SaveRepositoryError) || error.code !== "not_found") throw error;
+        saved = repository.createSave(data, saveId);
+      }
+      repository.setActiveSaveId(saved.saveId);
+      set({
+        activeSaveId: saved.saveId,
+        activeSaveCreatedAt: saved.createdAt,
+        activeSaveUpdatedAt: saved.updatedAt,
+        saveSummaries: repository.listSaves(),
+        saveError: null,
+      });
+      return true;
+    } catch (error) {
+      set({ saveError: error instanceof Error ? `Unable to save game: ${error.message}` : "Unable to save game." });
+      return false;
+    }
+  };
+
+  const saveAfter = (action: () => void) => {
+    action();
+    persistCurrentState();
+  };
+
+  return {
       draft: { ...initialDraft },
       gameState: null,
       playerConfirmed: false,
       characterConfirmed: false,
       entered: false,
       hasHydrated: false,
+      activeSaveId: null,
+      activeSaveCreatedAt: null,
+      activeSaveUpdatedAt: null,
+      saveSummaries: [],
+      saveError: null,
       ...initialStoryUI,
       ...initialEventUI,
       patchDraft: (patch) =>
@@ -125,7 +227,7 @@ export const useGameStore = create<GameStore>()(
           ...initialStoryUI,
           ...initialEventUI,
         })),
-      confirmPlayer: (draft) =>
+      confirmPlayer: (draft) => saveAfter(() => {
         set({
           draft,
           gameState: createInitialGameState(draft),
@@ -134,7 +236,12 @@ export const useGameStore = create<GameStore>()(
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
-        }),
+          activeSaveId: null,
+          activeSaveCreatedAt: null,
+          activeSaveUpdatedAt: null,
+          saveError: null,
+        });
+      }),
       selectCharacter: (id) =>
         set((state) => ({
           draft: { ...state.draft, maleLeadId: id },
@@ -147,14 +254,16 @@ export const useGameStore = create<GameStore>()(
       confirmCharacter: () => {
         const { draft, gameState } = get();
         set({ gameState: gameState ?? createInitialGameState(draft), characterConfirmed: true });
+        persistCurrentState();
       },
       enterGame: () => {
         const { draft, gameState } = get();
         set({ gameState: gameState ?? createInitialGameState(draft), entered: true });
+        persistCurrentState();
       },
-      recordAction: (receipt) => set({ receipt }),
-      advanceMockStory: (id) =>
-        set((state) => {
+      recordAction: (receipt) => saveAfter(() => set({ receipt })),
+      advanceMockStory: (id) => {
+        saveAfter(() => set((state) => {
           const choice = mockStories[state.storyIndex].choices.find((option) => option.id === id);
           if (!choice || !state.gameState) return state;
           const eventId = state.selectedEventId ?? mockStories[state.storyIndex].id;
@@ -221,7 +330,8 @@ export const useGameStore = create<GameStore>()(
             processedSettlementIds: history.processedSettlementIds,
             memories: history.memories,
           };
-        }),
+        }));
+      },
       setFreeAction: (freeAction) => set({ freeAction }),
       setAffection: (affection) =>
         set((state) => ({
@@ -248,8 +358,8 @@ export const useGameStore = create<GameStore>()(
           gameState: state.gameState ? setGameStateForDebug(state.gameState, { week }) : null,
           eventEngineResult: null,
         })),
-      applyMockChoice: (eventId, choiceId, boundaryId) =>
-        set((state) => {
+      applyMockChoice: (eventId, choiceId, boundaryId) => {
+        saveAfter(() => set((state) => {
           if (!state.gameState) return state;
           const eventTemplate = eventPool.find((event) => event.id === eventId);
           const debugChoice = mockStories[0].choices.find((choice) => choice.id === choiceId)!;
@@ -312,9 +422,10 @@ export const useGameStore = create<GameStore>()(
             processedSettlementIds: history.processedSettlementIds,
             memories: history.memories,
           };
-        }),
-      applyHistoryTestFixture: (fixtureId) =>
-        set((state) => {
+        }));
+      },
+      applyHistoryTestFixture: (fixtureId) => {
+        saveAfter(() => set((state) => {
           const fixture = getHistoryTestFixture(fixtureId);
           if (!fixture || !state.gameState) return state;
           const settlementId = `fixture:${state.gameState.gameId}:${fixture.id}`;
@@ -360,9 +471,10 @@ export const useGameStore = create<GameStore>()(
             processedSettlementIds: history.processedSettlementIds,
             memories: history.memories,
           };
-        }),
-      generateNextMockEvent: () =>
-        set((state) => {
+        }));
+      },
+      generateNextMockEvent: () => {
+        saveAfter(() => set((state) => {
           if (!state.gameState) return state;
           const eventEngineResult = runEventEngine(state.gameState, {
             history: state.eventHistory,
@@ -379,10 +491,74 @@ export const useGameStore = create<GameStore>()(
             eventHistory: selectedRecord ? [...state.eventHistory, selectedRecord] : state.eventHistory,
             eventSeed: state.eventSeed + 1,
           };
-        }),
-      setHydrated: (hasHydrated) => set({ hasHydrated }),
-      reset: () =>
-        set({
+        }));
+      },
+      initializePersistence: () => {
+        try {
+          const repository = getSaveRepository();
+          const saveSummaries = repository.listSaves();
+          const activeSaveId = repository.getActiveSaveId();
+          if (!activeSaveId) {
+            set({ saveSummaries, hasHydrated: true, saveError: null });
+            return;
+          }
+          const save = repository.loadGame(activeSaveId);
+          set({ ...saveToRuntime(save), saveSummaries, hasHydrated: true });
+        } catch (error) {
+          set({
+            hasHydrated: true,
+            saveError: error instanceof Error ? `Unable to load save: ${error.message}` : "Unable to load save.",
+          });
+        }
+      },
+      saveNow: () => persistCurrentState(),
+      loadSave: (saveId) => {
+        try {
+          const repository = getSaveRepository();
+          const save = repository.loadGame(saveId);
+          repository.setActiveSaveId(saveId);
+          set({ ...saveToRuntime(save), saveSummaries: repository.listSaves(), hasHydrated: true });
+          return true;
+        } catch (error) {
+          set({ saveError: error instanceof Error ? `Unable to load save: ${error.message}` : "Unable to load save." });
+          return false;
+        }
+      },
+      deleteSave: (saveId) => {
+        try {
+          const repository = getSaveRepository();
+          const deletingActive = get().activeSaveId === saveId;
+          repository.deleteSave(saveId);
+          const saveSummaries = repository.listSaves();
+          if (deletingActive) {
+            set({
+              draft: { ...initialDraft },
+              gameState: null,
+              playerConfirmed: false,
+              characterConfirmed: false,
+              entered: false,
+              ...initialStoryUI,
+              ...initialEventUI,
+              activeSaveId: null,
+              activeSaveCreatedAt: null,
+              activeSaveUpdatedAt: null,
+              saveSummaries,
+              saveError: null,
+            });
+          } else {
+            set({ saveSummaries, saveError: null });
+          }
+        } catch (error) {
+          set({ saveError: error instanceof Error ? `Unable to delete save: ${error.message}` : "Unable to delete save." });
+        }
+      },
+      startNewGame: () => {
+        try {
+          getSaveRepository().setActiveSaveId(null);
+        } catch {
+          // Runtime reset remains safe even when browser storage is unavailable.
+        }
+        set((state) => ({
           draft: { ...initialDraft },
           gameState: null,
           playerConfirmed: false,
@@ -390,43 +566,51 @@ export const useGameStore = create<GameStore>()(
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
-        }),
-    }),
-    {
-      name: "garden-phase-2",
-      storage: createJSONStorage(() => localStorage),
-      skipHydration: true,
-      partialize: (state) => ({
-        draft: state.draft,
-        gameState: state.gameState,
-        playerConfirmed: state.playerConfirmed,
-        characterConfirmed: state.characterConfirmed,
-        entered: state.entered,
-        receipt: state.receipt,
-        freeAction: state.freeAction,
-        storyIndex: state.storyIndex,
-        previousChoice: state.previousChoice,
-        eventHistory: state.eventHistory,
-        selectedEventId: state.selectedEventId,
-        selectedEventRecordId: state.selectedEventRecordId,
-        eventSeed: state.eventSeed,
-        stateChangeLog: state.stateChangeLog,
-      }),
-      merge: (persistedState, currentState) => {
-        const persisted = persistedState as Partial<GameStore>;
-        return {
-          ...currentState,
-          ...persisted,
-          eventHistory: normalizeEventHistory(persisted.eventHistory),
-          weeklyHistory: [],
-          choiceHistory: [],
-          storyFlags: { ...initialStoryFlags },
-          processedSettlementIds: [],
-          memories: [],
-        };
+          activeSaveId: null,
+          activeSaveCreatedAt: null,
+          activeSaveUpdatedAt: null,
+          saveError: null,
+          saveSummaries: state.saveSummaries,
+          hasHydrated: true,
+        }));
       },
-      onRehydrateStorage: () => (state) => state?.setHydrated(true),
-    },
-  ),
-);
+      createTestSave: () => {
+        const state = get();
+        if (!state.gameState) return false;
+        try {
+          const repository = getSaveRepository();
+          const previousActive = repository.getActiveSaveId();
+          const testGameState = createInitialGameState(state.draft);
+          repository.createSave({
+            playerSetup: { ...state.draft },
+            gameState: testGameState,
+            eventHistory: [],
+            choiceHistory: [],
+            weeklyStateHistory: [],
+            storyFlags: { ...initialStoryFlags },
+            memories: [],
+            processedSettlementIds: [],
+            runtime: {
+              playerConfirmed: true,
+              characterConfirmed: false,
+              entered: false,
+              storyIndex: 0,
+              previousChoice: null,
+              receipt: null,
+              selectedEventId: null,
+              selectedEventRecordId: null,
+              eventSeed: 1,
+            },
+          }, testGameState.gameId);
+          repository.setActiveSaveId(previousActive);
+          set({ saveSummaries: repository.listSaves(), saveError: null });
+          return true;
+        } catch (error) {
+          set({ saveError: error instanceof Error ? `Unable to create test save: ${error.message}` : "Unable to create test save." });
+          return false;
+        }
+      },
+      reset: () => get().startNewGame(),
+  };
+});
 

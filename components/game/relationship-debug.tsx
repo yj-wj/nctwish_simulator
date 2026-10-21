@@ -10,6 +10,7 @@ import type { EventCategory } from "@/types/event";
 import type { GameState, StatId } from "@/types/game";
 import { EndingEngineDebug } from "./ending-engine-debug";
 import { MemoryDebug } from "./memory-debug";
+import { SaveSystemDebug } from "./save-system-debug";
 import { StateEngineDebug } from "./state-engine-debug";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
@@ -59,9 +60,9 @@ export function RelationshipDebug() {
   const selected = storedResult?.selectedEvent?.event
     ?? (selectedEventId ? getEventTemplate(selectedEventId) : undefined);
 
-  return <section className="relationship-debug" aria-label="Phase 4B 开发测试">
+  return <section className="relationship-debug" aria-label="Phase 4C 开发测试">
     <header className="debug-summary">
-      <div><strong>Phase 4B Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
+      <div><strong>Phase 4C Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
       <span>Interaction · {relationshipRule.allowedInteractionLevel}</span>
       <span>matchedTriggers · {matchedTriggers.map(({ id }) => id).join(", ") || "none"}</span>
     </header>
@@ -94,5 +95,6 @@ export function RelationshipDebug() {
     <StateEngineDebug />
     <EndingEngineDebug />
     <MemoryDebug />
+    <SaveSystemDebug />
   </section>;
 }
