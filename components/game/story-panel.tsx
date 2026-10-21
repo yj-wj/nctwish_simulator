@@ -43,7 +43,7 @@ export function StoryPanel() {
   return <div className="story-layout"><article className="paper-panel story-paper">
     <div className="story-kicker"><span><Feather size={15} /> {story.sourceLabel}</span><span>{story.time}</span></div>
     <h1 ref={titleRef} tabIndex={-1}>{story.title}</h1><p className="story-deck">{story.subtitle}</p>
-    <p className="reference-note">Mock 剧情 {storyIndex + 1} / {mockStories.length} · A/B/C 均切换到下一段，末段后循环回到开局。</p>
+    <p className="reference-note">Mock 剧情 {storyIndex + 1} / {mockStories.length} · A/B/C 使用结构化 Mock Effect 结算并切换到下一段。</p>
     {previousChoice && <p className="reference-note" aria-label="上一轮选择">上一轮选择：{previousChoice.id} · {previousChoice.text}</p>}
     {selectedEvent && <section className="mock-event-card" aria-label="Event Engine 选中的 Mock 事件"><span>{selectedEvent.category}</span><div><small>EVENT ENGINE · MOCK</small><h2>{selectedEvent.title}</h2><p>{selectedEvent.description}</p></div></section>}
     <div className="story-divider"><span>✳</span></div>

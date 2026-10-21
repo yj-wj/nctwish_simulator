@@ -1,4 +1,5 @@
 import type { MockStory } from "@/types/ui";
+import { mockChoiceEffects } from "@/config/mock-choice-effects";
 
 // Fixed opening sample from the source document. Never used to settle actions.
 export const previewContext = { week: 1, scene: "首尔汝矣岛电视台后门", relationship: "陌生人", careerStage: "回归期" } as const;
@@ -26,16 +27,18 @@ export const opening = {
 // After the third sample, wrap to the opening so the interaction can be repeated.
 export const mockStories: MockStory[] = [
   {
+    id: "mock-opening",
     ...opening,
     sourceLabel: "初遇 · 原文开局样例",
     subtitle: "有些故事，始于一句很轻的谢谢。",
     choices: [
-      { id: "A", text: "立刻离开，不给自己惹麻烦。" },
-      { id: "B", text: "小声再说一次谢谢，试图让他听见。" },
-      { id: "C", text: "假装镇定，继续完成工作，但偷偷记住他的名字。" },
+      { id: "A", text: "立刻离开，不给自己惹麻烦。", effects: mockChoiceEffects.A },
+      { id: "B", text: "小声再说一次谢谢，试图让他听见。", effects: mockChoiceEffects.B },
+      { id: "C", text: "假装镇定，继续完成工作，但偷偷记住他的名字。", effects: mockChoiceEffects.C },
     ],
   },
   {
+    id: "mock-footsteps",
     title: "门后的脚步声",
     time: "清晨 · 固定样例",
     sourceLabel: "Mock 剧情 · 交互样例",
@@ -46,12 +49,13 @@ export const mockStories: MockStory[] = [
       "你看了一眼手里的热咖啡。天还没有亮，自己的事情也还没有做完。",
     ],
     choices: [
-      { id: "A", text: "整理好资料，确认没有遗漏。" },
-      { id: "B", text: "站到避风的位置，喝一口热咖啡。" },
-      { id: "C", text: "看看手机，确认自己接下来的安排。" },
+      { id: "A", text: "整理好资料，确认没有遗漏。", effects: mockChoiceEffects.A },
+      { id: "B", text: "站到避风的位置，喝一口热咖啡。", effects: mockChoiceEffects.B },
+      { id: "C", text: "看看手机，确认自己接下来的安排。", effects: mockChoiceEffects.C },
     ],
   },
   {
+    id: "mock-wind-pauses",
     title: "风停下的片刻",
     time: "清晨 · 固定样例",
     sourceLabel: "Mock 剧情 · 交互样例",
@@ -62,9 +66,9 @@ export const mockStories: MockStory[] = [
       "你把手里的东西拿稳，留出一点时间，想想自己接下来要做什么。",
     ],
     choices: [
-      { id: "A", text: "列一下今天需要完成的事情。" },
-      { id: "B", text: "给自己留一点吃早餐的时间。" },
-      { id: "C", text: "收好手机，准备继续自己的安排。" },
+      { id: "A", text: "列一下今天需要完成的事情。", effects: mockChoiceEffects.A },
+      { id: "B", text: "给自己留一点吃早餐的时间。", effects: mockChoiceEffects.B },
+      { id: "C", text: "收好手机，准备继续自己的安排。", effects: mockChoiceEffects.C },
     ],
   },
 ];

@@ -2,12 +2,25 @@
 
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import {
+  initialEndingHistoryMetrics,
+  initialEndingStoryFlags,
+} from "@/config/endings";
+import { mockChoiceEffects } from "@/config/mock-choice-effects";
 import { createInitialGameState } from "@/game/create-initial-game-state";
 import { createEventHistoryEntry, runEventEngine } from "@/game/eventEngine";
+import { evaluateAction } from "@/game/ruleEngine";
+import { setGameStateForDebug, settleChoice } from "@/game/stateEngine";
 import { mockStories } from "@/mocks/story";
-import type { CharacterId } from "@/types/character";
+import type { CharacterBoundaryId, CharacterId } from "@/types/character";
+import type {
+  EndingContext,
+  EndingHistoryMetricId,
+  EndingStoryFlagId,
+} from "@/types/ending";
 import type { EventEngineResult, EventHistoryEntry } from "@/types/event";
 import type { GameModeId, GameState, PlayerDraft, StatId } from "@/types/game";
+import type { StateChangeLogEntry } from "@/types/state";
 import type { ActionReceipt, StoryChoice } from "@/types/ui";
 
 const initialDraft: PlayerDraft = {
@@ -21,11 +34,27 @@ const initialDraft: PlayerDraft = {
 };
 
 const initialStoryUI = { storyIndex: 0, previousChoice: null, receipt: null, freeAction: "" };
+const createInitialEndingContext = (): EndingContext => ({
+  historyMetrics: { ...initialEndingHistoryMetrics },
+  storyFlags: { ...initialEndingStoryFlags },
+});
+
+function normalizeEndingContext(value: unknown): EndingContext {
+  if (!value || typeof value !== "object") return createInitialEndingContext();
+  const context = value as Partial<EndingContext>;
+  return {
+    historyMetrics: { ...initialEndingHistoryMetrics, ...context.historyMetrics },
+    storyFlags: { ...initialEndingStoryFlags, ...context.storyFlags },
+  };
+}
+
 const initialEventUI = {
   eventHistory: [] as EventHistoryEntry[],
   selectedEventId: null as string | null,
   eventEngineResult: null as EventEngineResult | null,
   eventSeed: 1,
+  stateChangeLog: [] as StateChangeLogEntry[],
+  endingContext: createInitialEndingContext(),
 };
 
 interface GameStore {
@@ -43,6 +72,8 @@ interface GameStore {
   selectedEventId: string | null;
   eventEngineResult: EventEngineResult | null;
   eventSeed: number;
+  stateChangeLog: StateChangeLogEntry[];
+  endingContext: EndingContext;
   patchDraft: (draft: Partial<PlayerDraft>) => void;
   confirmPlayer: (draft: PlayerDraft) => void;
   selectCharacter: (id: CharacterId) => void;
@@ -54,6 +85,10 @@ interface GameStore {
   setAffection: (affection: number) => void;
   setDebugStat: (stat: StatId, value: number) => void;
   setDebugGameMode: (gameMode: GameModeId) => void;
+  setDebugWeek: (week: number) => void;
+  applyMockChoice: (eventId: string, choiceId: StoryChoice["id"], boundaryId?: CharacterBoundaryId) => void;
+  setEndingHistoryMetric: (metric: EndingHistoryMetricId, value: number) => void;
+  setEndingStoryFlag: (flag: EndingStoryFlagId, value: boolean) => void;
   generateNextMockEvent: () => void;
   setHydrated: (hydrated: boolean) => void;
   reset: () => void;
@@ -111,46 +146,44 @@ export const useGameStore = create<GameStore>()(
       advanceMockStory: (id) =>
         set((state) => {
           const choice = mockStories[state.storyIndex].choices.find((option) => option.id === id);
-          if (!choice) return state;
-          const eventEngineResult = state.gameState
-            ? runEventEngine(state.gameState, {
-                history: state.eventHistory,
-                seed: state.eventSeed,
-              })
-            : null;
-          const selectedEvent = eventEngineResult?.selectedEvent?.event;
+          if (!choice || !state.gameState) return state;
+          const transition = settleChoice(state.gameState, choice.effects, {
+            eventId: state.selectedEventId ?? mockStories[state.storyIndex].id,
+            choiceId: choice.id,
+          });
+          const eventEngineResult = runEventEngine(transition.gameState, {
+            history: state.eventHistory,
+            seed: state.eventSeed,
+          });
+          const selectedEvent = eventEngineResult.selectedEvent?.event;
           return {
+            gameState: transition.gameState,
             storyIndex: (state.storyIndex + 1) % mockStories.length,
             previousChoice: choice,
-            receipt: { label: choice.text, response: `已选择 ${choice.id}：已切换到下一段固定 Mock 剧情，属性与周数不变。` },
+            receipt: { label: choice.text, response: `已选择 ${choice.id}：State Engine 已结算结构化 Mock Effect。` },
             freeAction: "",
             eventEngineResult,
             selectedEventId: selectedEvent?.id ?? null,
-            eventHistory: selectedEvent && state.gameState
-              ? [...state.eventHistory, createEventHistoryEntry(selectedEvent, state.gameState)]
+            eventHistory: selectedEvent
+              ? [...state.eventHistory, createEventHistoryEntry(selectedEvent, transition.gameState)]
               : state.eventHistory,
             eventSeed: state.eventSeed + 1,
+            stateChangeLog: [...state.stateChangeLog, transition.changeLog],
           };
         }),
       setFreeAction: (freeAction) => set({ freeAction }),
       setAffection: (affection) =>
         set((state) => ({
           gameState: state.gameState
-            ? { ...state.gameState, stats: { ...state.gameState.stats, affection: Math.min(100, Math.max(0, affection)) } }
+            ? setGameStateForDebug(state.gameState, { stats: { affection } })
             : null,
           eventEngineResult: null,
         })),
       setDebugStat: (stat, value) =>
         set((state) => {
           if (!state.gameState || !Number.isFinite(value)) return state;
-          const normalized = stat === "money"
-            ? Math.max(0, value)
-            : Math.min(100, Math.max(0, value));
           return {
-            gameState: {
-              ...state.gameState,
-              stats: { ...state.gameState.stats, [stat]: normalized },
-            },
+            gameState: setGameStateForDebug(state.gameState, { stats: { [stat]: value } }),
             eventEngineResult: null,
           };
         }),
@@ -158,6 +191,52 @@ export const useGameStore = create<GameStore>()(
         set((state) => ({
           gameState: state.gameState ? { ...state.gameState, gameMode } : null,
           eventEngineResult: null,
+        })),
+      setDebugWeek: (week) =>
+        set((state) => ({
+          gameState: state.gameState ? setGameStateForDebug(state.gameState, { week }) : null,
+          eventEngineResult: null,
+        })),
+      applyMockChoice: (eventId, choiceId, boundaryId) =>
+        set((state) => {
+          if (!state.gameState) return state;
+          const ruleEvaluation = boundaryId
+            ? evaluateAction(state.gameState, {
+                type: "other",
+                romanticIntensity: "none",
+                physicalIntimacy: "none",
+                publicExposure: "none",
+                professionalBoundary: "respected",
+                characterBoundarySignals: [boundaryId],
+              })
+            : undefined;
+          const transition = settleChoice(state.gameState, mockChoiceEffects[choiceId], {
+            eventId,
+            choiceId,
+            ruleEvaluation,
+          });
+          return {
+            gameState: transition.gameState,
+            eventEngineResult: null,
+            stateChangeLog: [...state.stateChangeLog, transition.changeLog],
+          };
+        }),
+      setEndingHistoryMetric: (metric, value) =>
+        set((state) => ({
+          endingContext: {
+            ...state.endingContext,
+            historyMetrics: {
+              ...state.endingContext.historyMetrics,
+              [metric]: Math.max(0, Math.round(Number.isFinite(value) ? value : 0)),
+            },
+          },
+        })),
+      setEndingStoryFlag: (flag, value) =>
+        set((state) => ({
+          endingContext: {
+            ...state.endingContext,
+            storyFlags: { ...state.endingContext.storyFlags, [flag]: value },
+          },
         })),
       generateNextMockEvent: () =>
         set((state) => {
@@ -205,7 +284,17 @@ export const useGameStore = create<GameStore>()(
         eventHistory: state.eventHistory,
         selectedEventId: state.selectedEventId,
         eventSeed: state.eventSeed,
+        stateChangeLog: state.stateChangeLog,
+        endingContext: state.endingContext,
       }),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<GameStore>;
+        return {
+          ...currentState,
+          ...persisted,
+          endingContext: normalizeEndingContext(persisted.endingContext),
+        };
+      },
       onRehydrateStorage: () => (state) => state?.setHydrated(true),
     },
   ),

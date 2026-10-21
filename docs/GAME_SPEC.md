@@ -1142,63 +1142,349 @@ Sakuya 的“发现不专一 → 心情值清零”归入第 3.6 节的原文明
 
 ## 12. Ending Rules
 
-**来源：**十七、结局系统（P406–P417）。
+**来源：** 原始游戏设定文档第十七章《结局系统》（已于产品化阶段更新）。
+
+本节内容为当前正式结局规则。
+
+结局条件分为三类：
+
+- **Numeric Condition**：由当前 GameState 数值直接判断。
+- **History Condition**：根据一段时间内的 State / Choice / Event History 统计判断。
+- **Story Flag / Derived Condition**：由正式剧情事件结算结果或已有状态推导。
+
+LLM 不负责决定结局类型。
+
+Ending Engine 只负责根据正式游戏状态返回 `EndingCandidate`。
+
+---
 
 ### 12.1 结局分歧入口
 
-**Rule · 允许逐步触发，不是立即强制结局**
+结局不是满足数值后立即强制触发。
 
-进入第 12 周、第 24 周、第 36 周或好感度达到 91 以上后，可逐步触发结局分歧。
+以下情况允许进入结局分歧：
 
-“好感度达到 91 以上”保留为 `affection >= 91`。原文写的是第 12、24、36 周节点或好感度条件，不改写成“第 12 周起每周自动结算结局”。周节点之后可触发窗口持续多久、多个候选的优先级均未定义。
+- 第 12 周
+- 第 24 周
+- 第 36 周
+- `affection >= 91`
 
-### 12.2 五个结局条目
+第 12、24、36 周为重要结局检查节点。
 
-原文全部结局条件都以“条件示例”开头，以下统一标 **Example**，数字准确保留。叙事方向标 **Reference**。它们不是本规格已经确定的完整布尔判定式，不能为了直接写代码把“高”“长期”“可控”自动换成数值。
+`affection >= 91` 可以提前解锁结局分歧事件。
 
-#### 12.2.1 HE：隐秘而稳定的爱
+满足入口条件仅代表：
 
-**Example · 条件示例：好感度 ≥ 90；恋情保密度 ≥ 60；公司警觉度 ≤ 70；玩家有稳定自我生活；男主事业压力未崩盘。**
+`endingBranchAvailable = true`
 
-**Reference · 结局方向：**你们没有公开，但拥有真实、稳定、彼此尊重的关系。你仍然有自己的生活，他也仍然属于舞台。只是在人群散去后，你们终于不用怀疑彼此的真心。
+不代表游戏立即结束。
 
-#### 12.2.2 OE：未公开的等待
+正式结局仍需经过关键剧情事件及玩家最终选择确认。
 
-**Example · 条件示例：好感度高；事业压力高；公司警觉度高；双方仍相爱，但现实不允许靠近。**
+特别说明：
 
-**Reference · 结局方向：**他去巡演，你继续生活。你们没有说分手，也没有承诺未来。聊天框停在一句“落地了吗”，像一场没有结束的雨。
+- HE 中的 `affection >= 90` 与结局入口 `affection >= 91` 不是同一个规则。
+- `secrecy < 30` 的媒体曝光危机与 `secrecy < 20` 的曝光 BE 条件作用不同，不得合并。
 
-#### 12.2.3 BE：曝光后的分离
+---
 
-**Example · 条件示例：恋情保密度 < 20；公司警觉度 > 85；人气值过高且舆论失控。**
+### 12.2 HE：隐秘而稳定的爱
 
-**Reference · 结局方向：**公司发声明否认关系，男主沉默，你成为粉圈攻击中心。你们不是不爱了，而是没有能力保护彼此。
+#### Numeric Conditions
 
-#### 12.2.4 BE：你选择离开
+必须同时满足：
 
-**Example · 条件示例：心情值长期过低；玩家多次选择自我保护；男主无法给予稳定回应。**
+- `affection >= 90`
+- `secrecy >= 60`
+- `companyAlert <= 70`
+- `careerPressure <= 90`
 
-**Reference · 结局方向：**你删掉聊天记录，搬离首尔，重新开始生活。后来你再听到他的歌，还是会在某一句歌词里停顿一下。
+#### History / Derived Conditions
 
-#### 12.2.5 SE：公开恋爱
+必须同时满足：
 
-**Example · 条件示例：好感度 ≥ 95；男主事业基础稳定；玩家人气值或自我事业足够支撑舆论；公司警觉度可控；触发高难度公开事件并成功。**
+- `playerLifeStable = true`
+- `relationshipConfirmed = true`
+- `formalBreakup = false`
+- `unresolvedMajorCrisis = false`
 
-**Reference · 结局方向：**公司承认“两人正在互相了解中”。舆论并不温柔，花园丝也并非全员祝福。但你们第一次不用在人群里装作陌生人。
+#### playerLifeStable
 
-### 12.3 精确条件索引与未定义项
+满足：
 
-| 结局 | 原文数字条件示例 | 必须同时保留的非量化示例条件 |
-| --- | --- | --- |
-| HE 隐秘而稳定的爱 | `affection >= 90`；`secrecy >= 60`；`companyAlert <= 70` | 玩家有稳定自我生活；男主事业压力未崩盘 |
-| OE 未公开的等待 | 无具体数字 | 好感度高；事业压力高；公司警觉度高；双方仍相爱但现实不允许靠近 |
-| BE 曝光后的分离 | `secrecy < 20`；`companyAlert > 85` | 人气值过高且舆论失控 |
-| BE 你选择离开 | 无具体数字 | 心情值长期过低；玩家多次选择自我保护；男主无法给予稳定回应 |
-| SE 公开恋爱 | `affection >= 95` | 男主事业基础稳定；玩家人气值或自我事业足够支撑舆论；公司警觉度可控；触发高难度公开事件并成功 |
+- `money >= 500`
+- `mood >= 40`
+- 最近 8 周至少完成 2 次带有以下标签之一的有效事件：
+  - `self_growth`
+  - `study`
+  - `career`
+  - `independent_life`
+- 当前不存在尚未解决的 `financial_crisis`
 
-**Rule · 开发计划第 11 节**：以后由程序判断 Ending Candidate，AI 仅对已确定结局进行文字演绎。本阶段不创建 Ending Engine，也不把以上示例当作已实现的条件。
+#### Ending Direction
 
-**整理说明：**HE 的 90 与分歧入口的 91 不是可以直接互换的值；周数节点也是入口，因此不能为“统一”而把 HE 改为 91。曝光危机 `< 30` 与曝光 BE 示例 `< 20` 作用不同，保留二者。
+你们没有公开，但拥有真实、稳定、彼此尊重的关系。玩家仍有自己的生活，他也仍然属于舞台。
+
+---
+
+### 12.3 OE：未公开的等待
+
+#### Numeric Conditions
+
+必须同时满足：
+
+- `affection >= 81`
+- `careerPressure >= 75`
+- `companyAlert >= 70`
+
+#### History / Derived Conditions
+
+必须同时满足：
+
+- `stillInLove = true`
+- `separationPressureActive = true`
+- `formalBreakup = false`
+- 玩家曾在关键事件中选择：
+  - `wait`
+  - `maintain_relationship`
+  - `temporary_distance`
+  - 或语义等价行为
+
+#### stillInLove
+
+满足：
+
+- `affection >= 81`
+- `relationshipConfirmed = true`
+- `formalBreakup = false`
+
+#### separationPressureActive
+
+以下至少一种情况已正式发生并仍未解决：
+
+- 公司限制私人联系
+- 长期巡演 / 异地
+- 玩家被调离相关工作
+- 高事业压力导致长期无法见面
+
+#### Ending Direction
+
+双方仍然相爱，但现实条件暂时不允许靠近。关系没有明确结束，也没有得到现实承诺。
+
+---
+
+### 12.4 BE：曝光后的分离
+
+#### Numeric Conditions
+
+必须同时满足：
+
+- `secrecy < 20`
+- `companyAlert > 85`
+- `popularity > 60`
+
+#### Story Flag Conditions
+
+必须同时满足：
+
+- `majorExposureOccurred = true`
+- `publicOpinionOutOfControl = true`
+
+并满足以下至少一项：
+
+- `playerChoseSeparation = true`
+- `forcedSeparation = true`
+- `relationshipFailedDuringExposure = true`
+
+#### publicOpinionOutOfControl
+
+普通 SNS 负面讨论不能直接视为“舆论失控”。
+
+只有重大舆论危机事件正式结算为失控时：
+
+`publicOpinionOutOfControl = true`
+
+#### Ending Direction
+
+恋情曝光后，公司与舆论压力失控，双方最终无法继续维持关系。
+
+---
+
+### 12.5 BE：你选择离开
+
+该结局依赖长期游戏历史，而不是单次当前数值。
+
+#### History Conditions
+
+必须满足：
+
+- `lowMoodWeeksInLast5 >= 3`
+- `selfProtectionChoiceCount >= 3`
+- `unstableResponseCount >= 2`
+
+并且：
+
+- `playerChoseLeave = true`
+
+#### lowMoodWeeksInLast5
+
+最近 5 次周结算中：
+
+`mood < 30`
+
+的周数。
+
+#### selfProtectionChoiceCount
+
+仅统计重要关系事件中正式结算为以下类型的玩家选择：
+
+- `self_protection`
+- `withdraw`
+- `keep_distance`
+
+或语义等价行为。
+
+#### unstableResponseCount
+
+仅统计重要关系冲突中，男主由于事业、公司压力、情绪、个人边界或现实条件，未能给予稳定回应的正式事件结果。
+
+#### Ending Direction
+
+玩家主动结束关系，并重新选择自己的生活。
+
+---
+
+### 12.6 SE：公开恋爱
+
+SE 为高难度特殊结局。
+
+#### Numeric Conditions
+
+必须同时满足：
+
+- `affection >= 95`
+- `careerPressure <= 60`
+- `companyAlert <= 60`
+
+并满足以下至少一项：
+
+- `popularity >= 60`
+- `playerCareerStable = true`
+
+#### History / Story Flag Conditions
+
+必须同时满足：
+
+- `relationshipConfirmed = true`
+- `maleLeadCareerStable = true`
+- `publicRevealEventTriggered = true`
+- `publicRevealSucceeded = true`
+- `publicOpinionOutOfControl = false`
+
+#### maleLeadCareerStable
+
+满足：
+
+- `careerPressure <= 60`
+- 最近 4 周不存在尚未解决的 `career_breakdown`
+
+#### playerCareerStable
+
+由玩家对应身份的学业、工作或个人发展事件线决定。
+
+只有达到该身份对应的稳定节点后：
+
+`playerCareerStable = true`
+
+LLM 的文字描述本身不能直接设置这个 Flag。
+
+#### Ending Direction
+
+双方成功通过高难度公开事件，公司最终承认关系。舆论仍有争议，但双方不再需要完全隐藏关系。
+
+---
+
+### 12.7 Ending Candidate
+
+Ending Engine 只返回：
+
+- `HE_SECRET_STABLE`
+- `OE_WAITING`
+- `BE_EXPOSURE`
+- `BE_PLAYER_LEAVES`
+- `SE_PUBLIC_RELATIONSHIP`
+
+满足条件不代表立即结束游戏。
+
+如果同时满足多个 Ending Candidate：
+
+1. 不随机选择。
+2. 不按照某个数值最高自动选择。
+3. 当前关键事件与玩家最终选择决定实际 `endingId`。
+4. 尚未完成最终抉择事件时继续游戏。
+5. LLM 只能生成已经确定结局后的叙事文本，不能决定 `endingId`。
+
+---
+
+### 12.8 Ending System 所需 History / Flags
+
+程序后续需要维护：
+
+#### History
+
+- `weeklyStateSnapshots`
+- `choiceHistory`
+- `eventHistory`
+- `selfGrowthEventCount`
+- `selfProtectionChoiceCount`
+- `unstableResponseCount`
+- `lowMoodWeeksInLast5`
+
+#### Story Flags
+
+- `relationshipConfirmed`
+- `formalBreakup`
+- `majorExposureOccurred`
+- `publicOpinionOutOfControl`
+- `publicRevealEventTriggered`
+- `publicRevealSucceeded`
+- `unresolvedMajorCrisis`
+- `separationPressureActive`
+- `playerChoseLeave`
+- `playerChoseSeparation`
+- `forcedSeparation`
+- `relationshipFailedDuringExposure`
+- `playerCareerStable`
+
+---
+
+### 12.9 History 与 Memory 的区别
+
+History / Story Flag 用于：
+
+**程序判断游戏事实、状态和 Ending Candidate。**
+
+Structured Memory 用于：
+
+**给 AI 提供过去剧情、人物关系和重要经历的上下文。**
+
+例如：
+
+History：
+
+`choiceTag = self_protection`
+
+用于统计：
+
+`selfProtectionChoiceCount`
+
+而 Structured Memory 可以保存：
+
+“第 8 周机场事件中，玩家为了避免影响男主事业，主动与他拉开了距离。”
+
+前者用于程序判断。
+
+后者用于后续 AI 剧情生成。
 
 ## 13. Narrative Constraints 与 Opening Template
 

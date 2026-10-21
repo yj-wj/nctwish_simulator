@@ -8,6 +8,8 @@ import { getMatchedTriggers, getRelationshipRule } from "@/game/ruleEngine";
 import { useGameStore } from "@/store/game-store";
 import type { EventCategory } from "@/types/event";
 import type { GameState, StatId } from "@/types/game";
+import { EndingEngineDebug } from "./ending-engine-debug";
+import { StateEngineDebug } from "./state-engine-debug";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
 const debugStats: { id: StatId; label: string; max: number }[] = [
@@ -39,6 +41,7 @@ export function RelationshipDebug() {
   const setAffection = useGameStore((state) => state.setAffection);
   const setDebugStat = useGameStore((state) => state.setDebugStat);
   const setDebugGameMode = useGameStore((state) => state.setDebugGameMode);
+  const setDebugWeek = useGameStore((state) => state.setDebugWeek);
   const generate = useGameStore((state) => state.generateNextMockEvent);
   const previewResult = useMemo(
     () => process.env.NODE_ENV === "development" && gameState
@@ -55,15 +58,16 @@ export function RelationshipDebug() {
   const selected = storedResult?.selectedEvent?.event
     ?? (selectedEventId ? getEventTemplate(selectedEventId) : undefined);
 
-  return <section className="relationship-debug" aria-label="Phase 3B 开发测试">
+  return <section className="relationship-debug" aria-label="Phase 3C.1 开发测试">
     <header className="debug-summary">
-      <div><strong>Phase 3B Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
+      <div><strong>Phase 3C.1 Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
       <span>Interaction · {relationshipRule.allowedInteractionLevel}</span>
       <span>matchedTriggers · {matchedTriggers.map(({ id }) => id).join(", ") || "none"}</span>
     </header>
 
     <div className="debug-controls">
       <label>剧情模式<select value={gameState.gameMode} onChange={(event) => setDebugGameMode(event.target.value as GameState["gameMode"])}>{gameModeConfig.map((mode) => <option key={mode.id} value={mode.id}>{mode.name}</option>)}</select></label>
+      <label>周数<input aria-label="Debug 周数" type="number" min={1} value={gameState.week} onChange={(event) => setDebugWeek(Number(event.target.value))} /></label>
       {debugStats.map(({ id, label, max }) => <label key={id}>{label}<input aria-label={`Debug ${label}`} type="number" min={0} max={max} value={gameState.stats[id]} onChange={(event) => setDebugStat(id, Number(event.target.value))} /></label>)}
     </div>
 
@@ -86,5 +90,7 @@ export function RelationshipDebug() {
     <details className="debug-details"><summary>Event History</summary><div className="debug-event-list">
       {eventHistory.length ? eventHistory.map((entry, index) => <p key={`${entry.eventId}-${index}`}><span>第 {entry.week} 周 · {entry.eventId}</span><small>{categoryLabels[entry.category]}</small></p>) : <p><span>尚无事件记录</span></p>}
     </div></details>
+    <StateEngineDebug />
+    <EndingEngineDebug />
   </section>;
 }

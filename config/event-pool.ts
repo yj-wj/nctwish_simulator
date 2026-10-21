@@ -19,7 +19,7 @@ function event(
     id,
     category,
     title,
-    description: `来自 GAME_SPEC 的候选事件：${title}。当前仅显示 Mock 摘要，不生成剧情或结算属性。`,
+    description: `来自 GAME_SPEC 的候选事件：${title}。当前仅显示 Mock 摘要，不生成剧情；属性由 Choice Effect 另行结算。`,
     sourceKind: "example",
     tags,
     baseWeight: 10,

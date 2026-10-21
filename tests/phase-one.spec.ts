@@ -37,6 +37,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     await expect(stats.getByText(label, { exact: true })).toBeVisible();
   }
   const initialStats = await stats.innerText();
+  let previousStats = initialStats;
   const initialContext = await page.locator(".game-context").innerText();
   await page.getByLabel("D · 自由行动").fill("尚未提交的草稿");
   const sequence = [
@@ -58,7 +59,9 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     await expect(page.locator(".story-choice")).toHaveCount(3);
     await expect(page.getByLabel("D · 自由行动")).toHaveValue("");
     await expect(page.getByRole("status")).toContainText(`已选择 ${id}`);
-    expect(await stats.innerText()).toEqual(initialStats);
+    const updatedStats = await stats.innerText();
+    expect(updatedStats).not.toEqual(previousStats);
+    previousStats = updatedStats;
     expect(await page.locator(".game-context").innerText()).toEqual(initialContext);
     await noOverflow(page);
   }
@@ -70,7 +73,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toBeVisible();
-  expect(await stats.innerText()).toEqual(initialStats);
+  expect(await stats.innerText()).toEqual(previousStats);
   await noOverflow(page);
   await page.locator(".site-header").scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("story.png"), fullPage: true });
@@ -101,13 +104,13 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.getByRole("status")).toContainText("自由行动已收到");
-  expect(await stats.innerText()).toEqual(initialStats);
+  expect(await stats.innerText()).toEqual(previousStats);
   await page.reload();
   await expect(page).toHaveURL(/\/game$/);
   await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.locator(".context-details")).toContainText("前田陆（Riku）");
-  expect(await stats.innerText()).toEqual(initialStats);
+  expect(await stats.innerText()).toEqual(previousStats);
   expect(errors).toEqual([]);
 });
 
