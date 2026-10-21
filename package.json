@@ -15,8 +15,11 @@
     "test:memory": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/memory-engine.test.mts",
     "test:save": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/save-system.test.mts",
     "test:ai": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ai-foundation.test.mts",
+    "test:ai-provider": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ai-provider.test.mts",
+    "test:turn": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/turn-engine.test.mts",
+    "test:ai:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ai-live.test.mts",
     "test:endings": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ending-engine.test.mts",
-    "test:unit": "npm run test:relationship && npm run test:rules && npm run test:events && npm run test:state && npm run test:history && npm run test:memory && npm run test:save && npm run test:endings && npm run test:ai",
+    "test:unit": "npm run test:relationship && npm run test:rules && npm run test:events && npm run test:state && npm run test:history && npm run test:memory && npm run test:save && npm run test:endings && npm run test:ai && npm run test:ai-provider && npm run test:turn",
     "test:e2e": "playwright test"
   },
   "dependencies": {

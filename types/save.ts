@@ -3,6 +3,7 @@ import type { GameState, PlayerDraft } from "./game";
 import type { ChoiceHistoryRecord, StoryFlagState, WeeklyStateSnapshot } from "./history";
 import type { MemoryRecord } from "./memory";
 import type { ActionReceipt, StoryChoice } from "./ui";
+import type { StoryGenerationOutput } from "../ai/schemas";
 
 export const GAME_SAVE_SCHEMA_VERSION = 1 as const;
 
@@ -16,6 +17,10 @@ export interface GameSaveRuntime {
   selectedEventId: string | null;
   selectedEventRecordId: string | null;
   eventSeed: number;
+  /** Added in Phase 5C; optional keeps schema-version-1 saves backward compatible. */
+  currentStory?: StoryGenerationOutput | null;
+  /** Prompt-only continuity hints; optional keeps older schema-version-1 saves compatible. */
+  recentStoryOpenings?: string[];
 }
 
 /** Authoritative persisted data. Derived ending and retrieval results are rebuilt after load. */

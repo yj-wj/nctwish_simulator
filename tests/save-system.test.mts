@@ -139,6 +139,27 @@ test("Save / Load round trip preserves every authoritative Phase 4 field", () =>
   assert.equal("endingCandidates" in loaded, false);
 });
 
+test("Phase 5C generated story runtime survives Save / Load for refresh continuation", () => {
+  const { repository } = repositoryHarness();
+  const data = makeSaveData("AI 回合存档");
+  data.runtime.currentStory = {
+    title: "下一段已经开始",
+    story: "这一段经过验证并完成了正式结算。",
+    choices: [
+      { id: "A", text: "保持距离" },
+      { id: "B", text: "继续交谈" },
+      { id: "C", text: "处理自己的安排" },
+    ],
+    suggestedEffects: [{ stat: "mood", magnitude: "small_positive", reason: "测试" }],
+    suggestedChoiceTags: ["maintain_relationship"],
+    suggestedOutcomeTags: [],
+    memoryCandidates: [],
+  };
+  repository.createSave(data, "ai-turn-save");
+  const loaded = repository.loadGame("ai-turn-save");
+  assert.deepEqual(loaded.runtime.currentStory, data.runtime.currentStory);
+});
+
 test("derived Ending Candidate is rebuilt from loaded facts instead of persisted", () => {
   const { repository } = repositoryHarness();
   repository.createSave(makeSaveData(), "ending-save");

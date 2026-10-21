@@ -5,11 +5,16 @@ import { eventPool } from "@/config/event-pool";
 import { getHistoryTestFixture } from "@/config/history-fixtures";
 import { initialStoryFlags } from "@/config/history";
 import { mockChoiceEffects } from "@/config/mock-choice-effects";
+import { generatedChoiceDefaults } from "@/config/turn-policy";
+import { generateStoryWithServer, interpretActionWithServer, AIClientError } from "@/ai/client";
 import { createInitialGameState } from "@/game/create-initial-game-state";
 import { createEventHistoryEntry, runEventEngine } from "@/game/eventEngine";
 import { evaluateAction } from "@/game/ruleEngine";
 import { processStructuredSettlement } from "@/game/settlementPipeline";
 import { setGameStateForDebug, settleChoice } from "@/game/stateEngine";
+import { createTurnId, executeTurnTransaction, TurnEngineError } from "@/game/turnEngine";
+import { getRelationshipStage } from "@/game/relationship";
+import { appendRecentStoryOpening, extractStoryOpening } from "@/game/contextBuilder";
 import { mockStories } from "@/mocks/story";
 import { createLocalStorageAdapter } from "@/storage/localStorageAdapter";
 import { createSaveRepository, SaveRepositoryError, type SaveRepository } from "@/storage/saveRepository";
@@ -21,6 +26,8 @@ import type { MemoryRecord } from "@/types/memory";
 import type { GameSave, GameSaveData, SaveSummary } from "@/types/save";
 import type { StateChangeLogEntry } from "@/types/state";
 import type { ActionReceipt, StoryChoice } from "@/types/ui";
+import type { StoryGenerationOutput } from "@/ai/schemas";
+import type { AIBadcaseRecord, TurnDomainState, TurnPlayerInput, TurnStatus, TurnTrace } from "@/types/turn";
 
 const initialDraft: PlayerDraft = {
   name: "",
@@ -32,7 +39,19 @@ const initialDraft: PlayerDraft = {
   gameModeId: "slow",
 };
 
-const initialStoryUI = { storyIndex: 0, previousChoice: null, receipt: null, freeAction: "" };
+const initialStoryUI = {
+  storyIndex: 0,
+  previousChoice: null as StoryChoice | null,
+  receipt: null as ActionReceipt | null,
+  freeAction: "",
+  currentStory: null as StoryGenerationOutput | null,
+  recentStoryOpenings: [extractStoryOpening(mockStories[0].paragraphs[0])],
+  turnStatus: "idle" as TurnStatus,
+  turnError: null as string | null,
+  activeTurnId: null as string | null,
+  lastTurnTrace: null as TurnTrace | null,
+  aiBadcases: [] as AIBadcaseRecord[],
+};
 
 const initialEventUI = {
   eventHistory: [] as EventHistoryEntry[],
@@ -69,6 +88,13 @@ export interface GameStore {
   freeAction: string;
   storyIndex: number;
   previousChoice: StoryChoice | null;
+  currentStory: StoryGenerationOutput | null;
+  recentStoryOpenings: string[];
+  turnStatus: TurnStatus;
+  turnError: string | null;
+  activeTurnId: string | null;
+  lastTurnTrace: TurnTrace | null;
+  aiBadcases: AIBadcaseRecord[];
   eventHistory: EventHistoryEntry[];
   selectedEventId: string | null;
   eventEngineResult: EventEngineResult | null;
@@ -92,6 +118,8 @@ export interface GameStore {
   enterGame: () => void;
   recordAction: (receipt: ActionReceipt) => void;
   advanceMockStory: (id: StoryChoice["id"]) => void;
+  processPresetChoice: (id: StoryChoice["id"]) => Promise<boolean>;
+  processFreeAction: () => Promise<boolean>;
   setFreeAction: (text: string) => void;
   setAffection: (affection: number) => void;
   setDebugStat: (stat: StatId, value: number) => void;
@@ -134,6 +162,8 @@ function getSaveData(state: GameStore): GameSaveData | null {
       selectedEventId: state.selectedEventId,
       selectedEventRecordId: state.selectedEventRecordId,
       eventSeed: state.eventSeed,
+      currentStory: state.currentStory,
+      recentStoryOpenings: state.recentStoryOpenings,
     },
   };
 }
@@ -153,6 +183,14 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
     selectedEventId: save.runtime.selectedEventId,
     selectedEventRecordId: save.runtime.selectedEventRecordId,
     eventSeed: save.runtime.eventSeed,
+    currentStory: save.runtime.currentStory ?? null,
+    recentStoryOpenings: save.runtime.recentStoryOpenings
+      ?? (save.runtime.currentStory ? [extractStoryOpening(save.runtime.currentStory.story)] : []),
+    turnStatus: "idle",
+    turnError: null,
+    activeTurnId: null,
+    lastTurnTrace: null,
+    aiBadcases: [],
     eventEngineResult: null,
     stateChangeLog: [],
     weeklyHistory: save.weeklyStateHistory,
@@ -168,22 +206,28 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
 }
 
 export const useGameStore = create<GameStore>()((set, get) => {
+  const writeSaveData = (data: GameSaveData, state: GameStore): GameSave => {
+    const repository = getSaveRepository();
+    const saveId = state.activeSaveId ?? data.gameState.gameId;
+    let saved: GameSave;
+    try {
+      const existing = repository.loadGame(saveId);
+      saved = repository.saveGame({ ...existing, ...data });
+    } catch (error) {
+      if (!(error instanceof SaveRepositoryError) || error.code !== "not_found") throw error;
+      saved = repository.createSave(data, saveId);
+    }
+    repository.setActiveSaveId(saved.saveId);
+    return saved;
+  };
+
   const persistCurrentState = (): boolean => {
     const state = get();
     const data = getSaveData(state);
     if (!data) return false;
     try {
       const repository = getSaveRepository();
-      const saveId = state.activeSaveId ?? data.gameState.gameId;
-      let saved: GameSave;
-      try {
-        const existing = repository.loadGame(saveId);
-        saved = repository.saveGame({ ...existing, ...data });
-      } catch (error) {
-        if (!(error instanceof SaveRepositoryError) || error.code !== "not_found") throw error;
-        saved = repository.createSave(data, saveId);
-      }
-      repository.setActiveSaveId(saved.saveId);
+      const saved = writeSaveData(data, state);
       set({
         activeSaveId: saved.saveId,
         activeSaveCreatedAt: saved.createdAt,
@@ -201,6 +245,156 @@ export const useGameStore = create<GameStore>()((set, get) => {
   const saveAfter = (action: () => void) => {
     action();
     persistCurrentState();
+  };
+
+  const runFormalTurn = async (
+    snapshot: GameStore,
+    input: TurnPlayerInput,
+    selectedChoice: StoryChoice | null,
+  ): Promise<boolean> => {
+    if (!snapshot.gameState) return false;
+    const domain: TurnDomainState = {
+      gameState: snapshot.gameState,
+      eventHistory: snapshot.eventHistory,
+      choiceHistory: snapshot.choiceHistory,
+      weeklyHistory: snapshot.weeklyHistory,
+      storyFlags: snapshot.storyFlags,
+      memories: snapshot.memories,
+      processedSettlementIds: snapshot.processedSettlementIds,
+      selectedEventId: snapshot.selectedEventId,
+      selectedEventRecordId: snapshot.selectedEventRecordId,
+      eventSeed: snapshot.eventSeed,
+      recentStoryOpenings: snapshot.recentStoryOpenings,
+    };
+    const turnId = createTurnId(domain, input);
+    set({
+      activeTurnId: turnId,
+      turnStatus: input.kind === "free_action" ? "interpreting" : "generating",
+      turnError: null,
+    });
+
+    try {
+      await executeTurnTransaction(domain, input, {
+        interpretAction: interpretActionWithServer,
+        generateStory: generateStoryWithServer,
+        onStatus: (turnStatus) => set({ turnStatus }),
+      }, {
+        persist: (result) => {
+          const recentStoryOpenings = appendRecentStoryOpening(snapshot.recentStoryOpenings, result.story.story);
+          const patch: Partial<GameStore> = {
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            choiceHistory: result.choiceHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
+            eventEngineResult: result.eventEngineResult,
+            selectedEventId: result.selectedEventId,
+            selectedEventRecordId: result.selectedEventRecordId,
+            eventSeed: result.eventSeed,
+            currentStory: result.story,
+            recentStoryOpenings,
+            previousChoice: selectedChoice ?? snapshot.previousChoice,
+            receipt: {
+              label: input.kind === "preset_choice" ? input.choice.text : input.text.trim(),
+              response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
+            },
+            freeAction: "",
+          };
+          const data = getSaveData({ ...snapshot, ...patch } as GameStore);
+          if (!data) throw new SaveRepositoryError("invalid_schema", "Turn produced no saveable game state.");
+          return writeSaveData(data, snapshot);
+        },
+        commit: (result, persisted) => {
+          const saved = persisted as GameSave;
+          const recentStoryOpenings = appendRecentStoryOpening(snapshot.recentStoryOpenings, result.story.story);
+          const rejectedSuggestions = [
+            ...result.trace.settlementProposal.rejectedEffects.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
+            ...result.trace.settlementProposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
+            ...result.trace.settlementProposal.rejectedOutcomeTags.map((tag) => `outcomeTag:${tag}`),
+            ...result.trace.settlementProposal.rejectedMemories.map(({ summary, reason }) => `memory:${summary}:${reason}`),
+          ];
+          const rejectionBadcase: AIBadcaseRecord | null = rejectedSuggestions.length > 0 ? {
+            turnId: result.turnId,
+            model: result.trace.storyMetadata.model,
+            playerAction: result.trace.playerInput,
+            relationshipStage: result.trace.relationshipStageBefore,
+            errorType: "rejected_suggestions",
+            validationErrors: [],
+            rejectedSuggestions,
+            occurredAt: new Date().toISOString(),
+          } : null;
+          set({
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            choiceHistory: result.choiceHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
+            eventEngineResult: result.eventEngineResult,
+            selectedEventId: result.selectedEventId,
+            selectedEventRecordId: result.selectedEventRecordId,
+            eventSeed: result.eventSeed,
+            currentStory: result.story,
+            recentStoryOpenings,
+            previousChoice: selectedChoice ?? snapshot.previousChoice,
+            receipt: {
+              label: input.kind === "preset_choice" ? input.choice.text : input.text.trim(),
+              response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
+            },
+            freeAction: "",
+            lastTurnTrace: result.trace,
+            aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
+              ? [...snapshot.aiBadcases, rejectionBadcase]
+              : snapshot.aiBadcases,
+            activeTurnId: null,
+            turnStatus: "completed",
+            turnError: null,
+            activeSaveId: saved.saveId,
+            activeSaveCreatedAt: saved.createdAt,
+            activeSaveUpdatedAt: saved.updatedAt,
+            saveSummaries: getSaveRepository().listSaves(),
+            saveError: null,
+          });
+        },
+      });
+      return true;
+    } catch (error) {
+      const isInputError = error instanceof TurnEngineError && error.code === "invalid_action";
+      const message = isInputError ? error.message : "本回合生成失败，请重试。";
+      const errorType = error instanceof TurnEngineError
+        ? error.code
+        : error instanceof AIClientError
+          ? error.code
+          : error instanceof SaveRepositoryError
+            ? error.code
+            : "unknown_error";
+      const validationErrors = error instanceof TurnEngineError
+        ? error.issues
+        : [error instanceof Error ? error.message : "Unknown turn error."];
+      const badcase: AIBadcaseRecord = {
+        turnId,
+        model: error instanceof AIClientError ? error.metadata?.model ?? "unavailable" : "unavailable",
+        playerAction: input.kind === "preset_choice" ? input.choice.text : input.text.trim(),
+        relationshipStage: getRelationshipStage(snapshot.gameState.stats.affection).id,
+        errorType,
+        validationErrors,
+        rejectedSuggestions: [],
+        occurredAt: new Date().toISOString(),
+      };
+      set((current) => ({
+        activeTurnId: null,
+        turnStatus: "error",
+        turnError: message,
+        aiBadcases: process.env.NODE_ENV === "development" ? [...current.aiBadcases, badcase] : current.aiBadcases,
+        ...(error instanceof SaveRepositoryError ? { saveError: `Unable to save turn: ${error.message}` } : {}),
+      }));
+      return false;
+    }
   };
 
   return {
@@ -331,6 +525,24 @@ export const useGameStore = create<GameStore>()((set, get) => {
             memories: history.memories,
           };
         }));
+      },
+      processPresetChoice: async (id) => {
+        const state = get();
+        if (!state.gameState || ["interpreting", "generating", "validating", "settling"].includes(state.turnStatus)) return false;
+        const generatedChoice = state.currentStory?.choices.find((choice) => choice.id === id);
+        const mockChoice = mockStories[state.storyIndex].choices.find((choice) => choice.id === id);
+        const choice: StoryChoice | null = generatedChoice
+          ? { id, text: generatedChoice.text, ...generatedChoiceDefaults[id] }
+          : mockChoice ?? null;
+        if (!choice) return false;
+        const input: TurnPlayerInput = { kind: "preset_choice", choice };
+        return runFormalTurn(state, input, choice);
+      },
+      processFreeAction: async () => {
+        const state = get();
+        if (!state.gameState || ["interpreting", "generating", "validating", "settling"].includes(state.turnStatus)) return false;
+        const input: TurnPlayerInput = { kind: "free_action", text: state.freeAction };
+        return runFormalTurn(state, input, null);
       },
       setFreeAction: (freeAction) => set({ freeAction }),
       setAffection: (affection) =>
@@ -600,6 +812,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               selectedEventId: null,
               selectedEventRecordId: null,
               eventSeed: 1,
+              currentStory: null,
             },
           }, testGameState.gameId);
           repository.setActiveSaveId(previousActive);

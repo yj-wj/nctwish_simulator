@@ -18,7 +18,7 @@ export function GameShell({ children }: { children: ReactNode }) {
   const relationshipStage = getRelationshipStage(gameState.stats.affection);
   return <RouteGuard stage="game"><SiteHeader /><main id="main-content" className="game-shell">
     <div className="game-context"><div className="week-label"><CalendarDays size={17} /><strong>第 {gameState.week} 周</strong><span>CHAPTER 01</span></div><div className="context-details"><span><MapPin size={15} />{gameState.currentScene}</span><span>{character.name}（{character.displayName}）</span><span className="relationship-pill"><Heart size={13} />{relationshipStage.name}</span></div></div>
-    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 5A · Mock AI 基础链路已启用；所有输出仅为 suggestion。</span></div>
+    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 5C · 完整 AI Turn Pipeline 已接入；AI 建议仅在规则验证后由系统结算。</span></div>
     <RelationshipDebug />
     {children}
   </main><BottomNav /></RouteGuard>;

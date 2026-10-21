@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AI_CONTEXT_BUDGET, AI_MODE, STORY_PROMPT_VERSION } from "../config/ai.ts";
+import { AI_CONTEXT_BUDGET, DEFAULT_AI_MODE, STORY_PROMPT_VERSION } from "../config/ai.ts";
 import { getEventTemplate } from "../config/event-pool.ts";
-import { buildStoryGenerationInput } from "../game/contextBuilder.ts";
+import { appendRecentStoryOpening, buildStoryGenerationInput } from "../game/contextBuilder.ts";
 import { getAIProvider, createInvalidMockOutput } from "../ai/mockProvider.ts";
 import { buildStoryPrompt } from "../ai/prompts/storyPrompt.ts";
 import { validateStoryOutput } from "../ai/outputValidator.ts";
@@ -142,9 +142,9 @@ test("player context excludes manager-only hidden memory while manager context m
 
 test("MockAIProvider uses mock mode and returns schema-valid output", async () => {
   const output = await getAIProvider().generateStory(build());
-  assert.equal(AI_MODE, "mock");
-  assert.equal(storyGenerationOutputSchema.safeParse(output).success, true);
-  assert.equal(output.choices.length, 3);
+  assert.equal(DEFAULT_AI_MODE, "mock");
+  assert.equal(storyGenerationOutputSchema.safeParse(output.data).success, true);
+  assert.equal(output.data.choices.length, 3);
 });
 
 test("invalid fixture and forbidden final-state fields are rejected", () => {
@@ -171,8 +171,8 @@ test("unknown memory candidate actor is rejected", () => {
   if (!result.success) assert.ok(result.issues.some((issue) => issue.includes("unknown actor")));
 });
 
-test("public confession suggestion in stranger stage produces a structural warning", () => {
-  const output = { ...validOutput(), suggestedChoiceTags: ["public_confession"] };
+test("relationship confirmation suggestion in stranger stage produces a structural warning", () => {
+  const output = { ...validOutput(), suggestedOutcomeTags: ["relationship_confirmed"] };
   const result = validateStoryOutput(output, build("player", { affection: 10 }));
   assert.equal(result.success, true);
   if (result.success) assert.deepEqual(result.warnings, ["relationship_stage_mismatch"]);
@@ -182,8 +182,53 @@ test("prompt is modular and versioned", () => {
   const prompt = buildStoryPrompt(build());
   assert.equal(prompt.promptVersion, STORY_PROMPT_VERSION);
   assert.deepEqual(prompt.sections.map(({ id }) => id), [
-    "SYSTEM_RULES", "CHARACTER_INSTRUCTIONS", "STATE_CONTEXT", "MEMORY_CONTEXT", "EVENT_CONTEXT", "OUTPUT_INSTRUCTIONS",
+    "SYSTEM_RULES", "CONTINUITY_INSTRUCTIONS", "CHARACTER_INSTRUCTIONS", "STATE_CONTEXT", "MEMORY_CONTEXT", "EVENT_CONTEXT", "OUTPUT_INSTRUCTIONS",
   ]);
+});
+
+test("first-turn and subsequent-turn prompts carry distinct opening instructions", () => {
+  const firstTurnInput = buildStoryGenerationInput({
+    gameState: makeState(),
+    currentEvent: null,
+    eventHistory: [],
+    memories: [],
+    storyFlags,
+    viewerId: "player",
+    isNewGameFirstTurn: true,
+  });
+  const subsequentInput = buildStoryGenerationInput({
+    gameState: makeState(),
+    currentEvent: null,
+    eventHistory: eventHistory(1),
+    memories: [],
+    storyFlags,
+    viewerId: "player",
+    isNewGameFirstTurn: false,
+    recentStoryOpenings: ["首尔的秋雨落在玻璃上。", "他接过你递来的手机。"],
+    playerAction: { type: "choice", text: "我把手机递给他。" },
+  });
+  const firstContinuity = buildStoryPrompt(firstTurnInput).sections.find(({ id }) => id === "CONTINUITY_INSTRUCTIONS")?.content ?? "";
+  const subsequentContinuity = buildStoryPrompt(subsequentInput).sections.find(({ id }) => id === "CONTINUITY_INSTRUCTIONS")?.content ?? "";
+
+  assert.equal(firstTurnInput.context.continuity.turnPhase, "new_game_first_turn");
+  assert.match(firstContinuity, /NEW GAME FIRST TURN ONLY/);
+  assert.match(firstContinuity, /style reference for this first turn/);
+  assert.equal(subsequentInput.context.continuity.turnPhase, "subsequent_turn");
+  assert.match(subsequentContinuity, /SUBSEQUENT TURN/);
+  assert.match(subsequentContinuity, /Continue the scene directly/);
+  assert.match(subsequentContinuity, /Do not use weather, season, sky, rain, wind, night, temperature/);
+  assert.doesNotMatch(subsequentContinuity, /begin (the turn|the story) with weather/i);
+  assert.match(subsequentContinuity, /首尔的秋雨落在玻璃上/);
+});
+
+test("recent opening awareness keeps only three compact first sentences", () => {
+  const openings = [
+    "第一句一。后文不应进入提示词。",
+    "第二句二！另一段。",
+    "第三句三？另一段。",
+    "第四句四。另一段。",
+  ].reduce((items, story) => appendRecentStoryOpening(items, story), [] as string[]);
+  assert.deepEqual(openings, ["第二句二！", "第三句三？", "第四句四。"]);
 });
 
 test("story generation does not mutate state, history, flags or memory", async () => {
@@ -194,6 +239,6 @@ test("story generation does not mutate state, history, flags or memory", async (
   const before = structuredClone({ gameState, events, flags, memories });
   const input = buildStoryGenerationInput({ gameState, currentEvent: null, eventHistory: events, memories, storyFlags: flags, viewerId: "player" });
   const output = await getAIProvider().generateStory(input);
-  assert.equal(validateStoryOutput(output, input).success, true);
+  assert.equal(validateStoryOutput(output.data, input).success, true);
   assert.deepEqual({ gameState, events, flags, memories }, before);
 });

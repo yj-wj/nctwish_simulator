@@ -1,18 +1,49 @@
 import { z } from "zod";
+import {
+  allowedChoiceTags,
+  allowedEffectMagnitudes,
+  allowedOutcomeTags,
+  allowedTurnStats,
+} from "../config/turn-policy.ts";
 
-const statIds = ["affection", "popularity", "mood", "money", "secrecy", "companyAlert", "careerPressure"] as const;
-const magnitudes = ["large_negative", "medium_negative", "small_negative", "none", "small_positive", "medium_positive", "large_positive"] as const;
 const relationshipStages = ["strangers", "noticed", "interested", "ambiguous", "committed", "inLove", "trial"] as const;
 const eventCategories = ["daily", "relationship", "career", "publicOpinion", "company", "reality", "entertainment", "crisis"] as const;
-const choiceTags = ["self_protection", "withdraw", "keep_distance", "wait", "maintain_relationship", "temporary_distance", "self_growth", "study", "career", "independent_life", "public_confession"] as const;
-const outcomeTags = ["unstable_response", "financial_crisis", "career_breakdown", "major_exposure", "separation_pressure", "self_growth", "study", "career", "independent_life"] as const;
 const storyFlags = ["relationshipConfirmed", "formalBreakup", "majorExposureOccurred", "publicOpinionOutOfControl", "publicRevealEventTriggered", "publicRevealSucceeded", "unresolvedMajorCrisis", "separationPressureActive", "playerChoseLeave", "playerChoseSeparation", "forcedSeparation", "relationshipFailedDuringExposure", "playerCareerStable"] as const;
 
-const gameStatsSchema = z.object(Object.fromEntries(statIds.map((id) => [id, z.number().finite()])) as Record<(typeof statIds)[number], z.ZodNumber>).strict();
+const gameStatsSchema = z.object(Object.fromEntries(allowedTurnStats.map((id) => [id, z.number().finite()])) as Record<(typeof allowedTurnStats)[number], z.ZodNumber>).strict();
 const entityIdSchema = z.string().min(1);
+const actionTypes = ["politeConversation", "simpleHelp", "workContact", "casualConcern", "privateMessage", "outsideWorkMeeting", "flirt", "jealousTest", "lateNightContact", "confession", "defineRelationship", "privateIntimacy", "publicRelationship", "breakup", "wait", "selfGrowth", "other"] as const;
+const actionSemanticTags = ["self_protection", "withdraw", "keep_distance", "wait", "maintain_relationship", "temporary_distance", "self_growth", "study", "career", "independent_life"] as const;
+
+export const actionInterpretationInputSchema = z.object({
+  promptVersion: z.literal("action-v1"),
+  playerText: z.string().trim().min(1).max(500),
+  context: z.object({
+    relationshipStage: z.enum(relationshipStages),
+    event: z.object({ id: z.string().min(1), category: z.enum(eventCategories), title: z.string().min(1), tags: z.array(z.string().min(1)) }).strict().nullable(),
+    allowedInteractionLevel: z.enum(["formal", "familiar", "privateContact", "limitedIntimacy", "privateRelationship", "intimateRelationship", "majorDecision"]),
+    allowedActionTypes: z.array(z.enum(actionTypes)),
+    warnings: z.array(z.string().min(1)),
+    narrativeConstraints: z.array(z.string().min(1)),
+    allowedInteractions: z.array(z.string().min(1)),
+    prohibitedInteractions: z.array(z.string().min(1)),
+    knownActorIds: z.array(entityIdSchema).min(2),
+  }).strict(),
+}).strict();
+
+export const actionInterpretationOutputSchema = z.object({
+  intentSummary: z.string().trim().min(1),
+  actionType: z.enum(actionTypes),
+  targetActorIds: z.array(entityIdSchema),
+  semanticTags: z.array(z.enum(actionSemanticTags)),
+  romanticIntensity: z.enum(["none", "low", "medium", "high"]),
+  publicExposure: z.enum(["low", "medium", "high"]),
+  boundaryRisk: z.enum(["low", "medium", "high"]),
+  confidence: z.number().min(0).max(1),
+}).strict();
 
 export const storyGenerationInputSchema = z.object({
-  promptVersion: z.literal("story-v1"),
+  promptVersion: z.literal("story-v2"),
   context: z.object({
     narrativeRules: z.array(z.string().min(1)).min(1),
     player: z.object({
@@ -35,14 +66,19 @@ export const storyGenerationInputSchema = z.object({
     event: z.object({ id: z.string().min(1), category: z.enum(eventCategories), title: z.string().min(1), description: z.string().nullable(), tags: z.array(z.string().min(1)) }).strict().nullable(),
     ruleEvaluation: z.object({
       allowedInteractionLevel: z.enum(["formal", "familiar", "privateContact", "limitedIntimacy", "privateRelationship", "intimateRelationship", "majorDecision"]),
+      allowedActionTypes: z.array(z.enum(actionTypes)),
       riskLevel: z.enum(["low", "moderate", "high", "critical"]),
       warnings: z.array(z.string().min(1)), matchedTriggers: z.array(z.string().min(1)), narrativeConstraints: z.array(z.string().min(1)),
       allowedInteractions: z.array(z.string().min(1)), prohibitedInteractions: z.array(z.string().min(1)),
     }).strict(),
     storyFacts: z.array(z.enum(storyFlags)),
+    continuity: z.object({
+      turnPhase: z.enum(["new_game_first_turn", "subsequent_turn"]),
+      recentOpenings: z.array(z.string().trim().min(1).max(160)).max(3),
+    }).strict(),
     recentEvents: z.array(z.object({
       recordId: z.string().min(1), eventId: z.string().min(1), week: z.number().int().positive(), category: z.enum(eventCategories),
-      tags: z.array(z.string().min(1)), outcomeTags: z.array(z.enum(outcomeTags)), status: z.enum(["selected", "active", "resolved"]),
+      tags: z.array(z.string().min(1)), outcomeTags: z.array(z.enum(allowedOutcomeTags)), status: z.enum(["selected", "active", "resolved"]),
     }).strict()),
     relevantMemories: z.array(z.object({
       id: z.string().min(1), week: z.number().int().positive(), type: z.enum(["short_term", "long_term", "relationship", "hidden"]),
@@ -61,9 +97,9 @@ export const storyGenerationOutputSchema = z.object({
   story: z.string().trim().min(1),
   choices: z.array(z.object({ id: z.enum(["A", "B", "C"]), text: z.string().trim().min(1) }).strict()).length(3)
     .refine((choices) => new Set(choices.map(({ id }) => id)).size === choices.length, { message: "Choice ids must be unique." }),
-  suggestedEffects: z.array(z.object({ stat: z.enum(statIds), magnitude: z.enum(magnitudes), reason: z.string().trim().min(1) }).strict()).default([]),
-  suggestedChoiceTags: z.array(z.enum(choiceTags)).default([]),
-  suggestedOutcomeTags: z.array(z.enum(outcomeTags)).default([]),
+  suggestedEffects: z.array(z.object({ stat: z.enum(allowedTurnStats), magnitude: z.enum(allowedEffectMagnitudes), reason: z.string().trim().min(1) }).strict()).default([]),
+  suggestedChoiceTags: z.array(z.enum(allowedChoiceTags)).default([]),
+  suggestedOutcomeTags: z.array(z.enum(allowedOutcomeTags)).default([]),
   memoryCandidates: z.array(z.object({
     type: z.enum(["short_term", "relationship", "long_term"]), summary: z.string().trim().min(1), actors: z.array(entityIdSchema).min(1),
     tags: z.array(z.string().trim().min(1)), importance: z.number().int().min(1).max(5),
@@ -72,3 +108,5 @@ export const storyGenerationOutputSchema = z.object({
 
 export type StoryGenerationInput = z.infer<typeof storyGenerationInputSchema>;
 export type StoryGenerationOutput = z.infer<typeof storyGenerationOutputSchema>;
+export type ActionInterpretationInput = z.infer<typeof actionInterpretationInputSchema>;
+export type ActionInterpretationOutput = z.infer<typeof actionInterpretationOutputSchema>;

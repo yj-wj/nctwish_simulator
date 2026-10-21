@@ -23,6 +23,7 @@ const choiceTagSchema = z.enum([
 const outcomeTagSchema = z.enum([
   "unstable_response", "financial_crisis", "career_breakdown", "major_exposure",
   "separation_pressure", "self_growth", "study", "career", "independent_life",
+  "relationship_confirmed", "formal_breakup", "public_reveal_succeeded", "crisis_resolved",
 ]);
 const storyFlagIdSchema = z.enum([
   "relationshipConfirmed", "formalBreakup", "majorExposureOccurred", "publicOpinionOutOfControl",
@@ -181,6 +182,21 @@ const storyChoiceSchema = z.object({
   tags: z.array(choiceTagSchema),
   outcome: structuredOutcomeSchema.optional(),
 });
+const generatedStorySchema = z.object({
+  title: z.string().min(1),
+  story: z.string().min(1),
+  choices: z.array(z.object({ id: z.enum(["A", "B", "C"]), text: z.string().min(1) })).length(3),
+  suggestedEffects: z.array(z.object({ stat: z.enum(["affection", "popularity", "mood", "money", "secrecy", "companyAlert", "careerPressure"]), magnitude: effectMagnitudeSchema, reason: z.string().min(1) })),
+  suggestedChoiceTags: z.array(choiceTagSchema),
+  suggestedOutcomeTags: z.array(outcomeTagSchema),
+  memoryCandidates: z.array(z.object({
+    type: z.enum(["short_term", "relationship", "long_term"]),
+    summary: z.string().min(1),
+    actors: z.array(entityIdSchema),
+    tags: z.array(z.string()),
+    importance: z.number().int().min(1).max(5),
+  })),
+});
 
 export const gameSaveDataSchema = z.object({
   playerSetup: playerDraftSchema,
@@ -201,6 +217,8 @@ export const gameSaveDataSchema = z.object({
     selectedEventId: z.string().nullable(),
     selectedEventRecordId: z.string().nullable(),
     eventSeed: z.number().int().min(0),
+    currentStory: generatedStorySchema.nullable().optional(),
+    recentStoryOpenings: z.array(z.string().trim().min(1).max(160)).max(3).optional(),
   }),
 });
 

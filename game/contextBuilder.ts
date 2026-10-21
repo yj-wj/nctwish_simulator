@@ -1,9 +1,9 @@
-import { STORY_PROMPT_VERSION, AI_CONTEXT_BUDGET, compactNarrativeRules } from "../config/ai.ts";
+import { ACTION_PROMPT_VERSION, STORY_PROMPT_VERSION, AI_CONTEXT_BUDGET, compactNarrativeRules } from "../config/ai.ts";
 import { getCharacter } from "../config/characters/index.ts";
 import { getFanLevel } from "../config/fan-levels.ts";
 import { getGameMode } from "../config/game-modes.ts";
 import { getPlayerIdentity } from "../config/identities.ts";
-import { storyGenerationInputSchema, type StoryGenerationInput } from "../ai/schemas.ts";
+import { actionInterpretationInputSchema, storyGenerationInputSchema, type ActionInterpretationInput, type StoryGenerationInput } from "../ai/schemas.ts";
 import type { EventHistoryEntry, EventTemplate } from "../types/event.ts";
 import type { GameState } from "../types/game.ts";
 import type { StoryFlagState } from "../types/history.ts";
@@ -22,6 +22,50 @@ export interface BuildStoryContextOptions {
   viewerId: EntityId;
   ruleEvaluation?: RuleEvaluation;
   playerAction?: StoryGenerationInput["playerAction"];
+  isNewGameFirstTurn?: boolean;
+  recentStoryOpenings?: string[];
+}
+
+export function extractStoryOpening(story: string, maxLength = 160): string {
+  const normalized = story.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  const sentenceEnd = normalized.search(/[。！？!?]/);
+  const firstSentence = sentenceEnd >= 0 ? normalized.slice(0, sentenceEnd + 1) : normalized;
+  return firstSentence.slice(0, maxLength).trim();
+}
+
+export function appendRecentStoryOpening(openings: string[], story: string): string[] {
+  const opening = extractStoryOpening(story);
+  if (!opening) return openings.slice(-AI_CONTEXT_BUDGET.recentStoryOpenings);
+  return [...openings.filter((item) => item !== opening), opening]
+    .slice(-AI_CONTEXT_BUDGET.recentStoryOpenings);
+}
+
+export function buildActionInterpretationInput(
+  storyInput: StoryGenerationInput,
+  playerText: string,
+): ActionInterpretationInput {
+  const { context } = storyInput;
+  return actionInterpretationInputSchema.parse({
+    promptVersion: ACTION_PROMPT_VERSION,
+    playerText,
+    context: {
+      relationshipStage: context.gameState.relationshipStage,
+      event: context.event ? {
+        id: context.event.id,
+        category: context.event.category,
+        title: context.event.title,
+        tags: context.event.tags,
+      } : null,
+      allowedInteractionLevel: context.ruleEvaluation.allowedInteractionLevel,
+      allowedActionTypes: context.ruleEvaluation.allowedActionTypes,
+      warnings: context.ruleEvaluation.warnings,
+      narrativeConstraints: context.ruleEvaluation.narrativeConstraints,
+      allowedInteractions: context.ruleEvaluation.allowedInteractions,
+      prohibitedInteractions: context.ruleEvaluation.prohibitedInteractions,
+      knownActorIds: ["player", context.maleLead.id, ...context.relevantMemories.flatMap(({ actors }) => actors)],
+    },
+  });
 }
 
 const neutralNarrativeAction: StructuredPlayerAction = {
@@ -59,6 +103,12 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
   const trueStoryFacts = Object.entries(storyFlags)
     .filter(([, value]) => value)
     .map(([id]) => id as keyof StoryFlagState);
+  const isNewGameFirstTurn = options.isNewGameFirstTurn
+    ?? (!options.playerAction && eventHistory.length === 0 && memories.length === 0);
+  const recentOpenings = (options.recentStoryOpenings ?? [])
+    .map((opening) => extractStoryOpening(opening))
+    .filter(Boolean)
+    .slice(-AI_CONTEXT_BUDGET.recentStoryOpenings);
 
   return storyGenerationInputSchema.parse({
     promptVersion: STORY_PROMPT_VERSION,
@@ -102,6 +152,7 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
       } : null,
       ruleEvaluation: {
         allowedInteractionLevel: rule.relationshipRule.allowedInteractionLevel,
+        allowedActionTypes: [...rule.relationshipRule.allowedActionTypes],
         riskLevel: rule.riskLevel,
         warnings: [...rule.warnings],
         matchedTriggers: rule.matchedTriggers.map(({ id }) => id),
@@ -110,6 +161,10 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
         prohibitedInteractions: [...relationshipStage.prohibitedInteractions],
       },
       storyFacts: trueStoryFacts,
+      continuity: {
+        turnPhase: isNewGameFirstTurn ? "new_game_first_turn" : "subsequent_turn",
+        recentOpenings,
+      },
       recentEvents,
       relevantMemories: scoredMemories.map(({ memory, score }) => ({
         id: memory.id,

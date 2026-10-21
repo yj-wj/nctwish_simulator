@@ -13,6 +13,7 @@ import { MemoryDebug } from "./memory-debug";
 import { SaveSystemDebug } from "./save-system-debug";
 import { StateEngineDebug } from "./state-engine-debug";
 import { AIDebug } from "./ai-debug";
+import { TurnTraceDebug } from "./turn-trace-debug";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
 const debugStats: { id: StatId; label: string; max: number }[] = [
@@ -61,9 +62,9 @@ export function RelationshipDebug() {
   const selected = storedResult?.selectedEvent?.event
     ?? (selectedEventId ? getEventTemplate(selectedEventId) : undefined);
 
-  return <section className="relationship-debug" aria-label="Phase 5A 开发测试">
+  return <section className="relationship-debug" aria-label="Phase 5C 开发测试">
     <header className="debug-summary">
-      <div><strong>Phase 5A Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
+      <div><strong>Phase 5C Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
       <span>Interaction · {relationshipRule.allowedInteractionLevel}</span>
       <span>matchedTriggers · {matchedTriggers.map(({ id }) => id).join(", ") || "none"}</span>
     </header>
@@ -98,5 +99,6 @@ export function RelationshipDebug() {
     <MemoryDebug />
     <SaveSystemDebug />
     <AIDebug />
+    <TurnTraceDebug />
   </section>;
 }

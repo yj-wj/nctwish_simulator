@@ -23,7 +23,11 @@ export type OutcomeTag =
   | "self_growth"
   | "study"
   | "career"
-  | "independent_life";
+  | "independent_life"
+  | "relationship_confirmed"
+  | "formal_breakup"
+  | "public_reveal_succeeded"
+  | "crisis_resolved";
 
 export type EventStatus = "selected" | "active" | "resolved";
 

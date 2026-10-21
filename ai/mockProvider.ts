@@ -1,19 +1,23 @@
-import { AI_MODE } from "../config/ai.ts";
 import type { AIProvider } from "./provider.ts";
-import type { StoryGenerationInput, StoryGenerationOutput } from "./schemas.ts";
-import { storyGenerationInputSchema, storyGenerationOutputSchema } from "./schemas.ts";
+import type { ActionInterpretationInput, ActionInterpretationOutput, StoryGenerationInput, StoryGenerationOutput } from "./schemas.ts";
+import { actionInterpretationInputSchema, actionInterpretationOutputSchema, storyGenerationInputSchema, storyGenerationOutputSchema } from "./schemas.ts";
 
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
 
-  async generateStory(rawInput: StoryGenerationInput): Promise<StoryGenerationOutput> {
+  async generateStory(rawInput: StoryGenerationInput) {
     const input = storyGenerationInputSchema.parse(rawInput);
     const { context } = input;
     const eventTitle = context.event?.title ?? "首尔的一段普通时间";
     const eventDescription = context.event?.description ?? "眼前的安排仍在继续，周围的人各自忙着自己的事情。";
-    const riskCopy = context.ruleEvaluation.riskLevel === "low"
-      ? "这次接触仍在合理边界内。"
-      : "空气里留着没有说出口的顾虑，任何动作都可能被旁人重新解释。";
+    const relationshipMismatch = context.ruleEvaluation.warnings.some((warning) =>
+      warning === "rejectionLikely" || warning === "awkwardReactionLikely");
+    const secrecyRisk = context.ruleEvaluation.warnings.includes("secrecyRisk");
+    const riskCopy = relationshipMismatch
+      ? "这份突然越过关系边界的表达没有被直接接受。他停顿片刻，礼貌而明确地拉开了距离。"
+      : context.ruleEvaluation.riskLevel === "low"
+        ? "这次接触仍在合理边界内。"
+        : "空气里留着没有说出口的顾虑，任何动作都可能被旁人重新解释。";
     const modeCopy = context.player.gameMode.id === "healing"
       ? "你也没有忘记照顾自己的节奏。"
       : context.player.gameMode.id === "pressure"
@@ -30,6 +34,8 @@ export class MockAIProvider implements AIProvider {
       suggestedEffects: [
         { stat: "mood", magnitude: "small_positive", reason: "玩家以可控方式面对当前情境。" },
         { stat: "companyAlert", magnitude: context.ruleEvaluation.riskLevel === "low" ? "none" : "small_positive", reason: "公开环境中的接触可能引起额外注意。" },
+        ...(relationshipMismatch ? [{ stat: "affection" as const, magnitude: "small_negative" as const, reason: "越过当前关系边界导致对方拉开距离。" }] : []),
+        ...(secrecyRisk ? [{ stat: "secrecy" as const, magnitude: "small_negative" as const, reason: "公开互动提高了被注意的风险。" }] : []),
       ],
       suggestedChoiceTags: ["maintain_relationship"],
       suggestedOutcomeTags: [],
@@ -43,14 +49,49 @@ export class MockAIProvider implements AIProvider {
     } satisfies StoryGenerationOutput;
 
     // The mock follows the same schema boundary as a future remote provider.
-    return storyGenerationOutputSchema.parse(output);
+    return {
+      data: storyGenerationOutputSchema.parse(output),
+      metadata: {
+        provider: "mock" as const,
+        model: "mock-story-v1",
+        latencyMs: 0,
+        usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+        success: true as const,
+      },
+    };
+  }
+
+  async interpretAction(rawInput: ActionInterpretationInput) {
+    const input = actionInterpretationInputSchema.parse(rawInput);
+    const text = input.playerText;
+    const isConfession = /表白|喜欢你|爱你/.test(text);
+    const keepsDistance = /距离|离开|退开|晚点|暂时/.test(text);
+    const output = {
+      intentSummary: keepsDistance ? "玩家希望暂时保持距离并降低公开风险。" : isConfession ? "玩家希望直接表达感情。" : "玩家希望以当前关系边界继续互动。",
+      actionType: isConfession ? "confession" : keepsDistance ? "other" : "politeConversation",
+      targetActorIds: [input.context.knownActorIds[1]],
+      semanticTags: keepsDistance ? ["self_protection", "keep_distance", "temporary_distance"] : isConfession ? ["maintain_relationship"] : ["maintain_relationship"],
+      romanticIntensity: isConfession ? "high" : "low",
+      publicExposure: /人太多|公开|镜头|粉丝/.test(text) ? "high" : "low",
+      boundaryRisk: isConfession && input.context.relationshipStage === "strangers" ? "high" : keepsDistance ? "low" : "medium",
+      confidence: 0.82,
+    } satisfies ActionInterpretationOutput;
+    return {
+      data: actionInterpretationOutputSchema.parse(output),
+      metadata: {
+        provider: "mock" as const,
+        model: "mock-action-v1",
+        latencyMs: 0,
+        usage: { inputTokens: null, outputTokens: null, totalTokens: null },
+        success: true as const,
+      },
+    };
   }
 }
 
 const mockProvider = new MockAIProvider();
 
 export function getAIProvider(): AIProvider {
-  if (AI_MODE !== "mock") throw new Error(`Unsupported AI mode: ${String(AI_MODE)}`);
   return mockProvider;
 }
 

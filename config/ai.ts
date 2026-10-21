@@ -1,11 +1,26 @@
-export const AI_MODE = "mock" as const;
+export type AIMode = "mock" | "qwen";
+
+export const DEFAULT_AI_MODE: AIMode = "mock";
+
+export const AI_PROVIDER_DEFAULTS = {
+  actionModel: "qwen3.7-flash",
+  storyModel: "qwen3.7-plus",
+  enableThinking: false,
+  actionMaxCompletionTokens: 650,
+  storyMaxCompletionTokens: 2000,
+  actionTimeoutMs: 25_000,
+  storyTimeoutMs: 40_000,
+  maxRetries: 1,
+} as const;
 
 export const AI_CONTEXT_BUDGET = {
   recentEvents: 4,
   relevantMemories: 6,
+  recentStoryOpenings: 3,
 } as const;
 
-export const STORY_PROMPT_VERSION = "story-v1" as const;
+export const STORY_PROMPT_VERSION = "story-v2" as const;
+export const ACTION_PROMPT_VERSION = "action-v1" as const;
 
 export const compactNarrativeRules = [
   "所有人物与关系属于平行世界虚构游戏设定，不得声称现实艺人的私人生活是真实事实。",

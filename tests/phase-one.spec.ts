@@ -37,43 +37,36 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     await expect(stats.getByText(label, { exact: true })).toBeVisible();
   }
   const initialStats = await stats.innerText();
-  let previousStats = initialStats;
   const initialContext = await page.locator(".game-context").innerText();
   await page.getByLabel("D · 自由行动").fill("尚未提交的草稿");
-  const sequence = [
-    { id: "A", title: "门后的脚步声" },
-    { id: "B", title: "风停下的片刻" },
-    { id: "C", title: "天亮之前，短暂交集" },
-    { id: "A", title: "门后的脚步声" },
-  ];
-  for (const { id, title } of sequence) {
-    const previousBody = await page.locator(".story-body").innerText();
-    const choice = page.getByRole("button", { name: new RegExp(`^${id}`) });
+  const sequence = ["A", "B", "C", "A"] as const;
+  for (const id of sequence) {
+    const choice = page.locator(".story-choice").filter({ hasText: id }).first();
     const previousText = await choice.locator("span").nth(1).innerText();
     await choice.click();
-    await expect(page.getByRole("heading", { name: title, exact: true })).toBeFocused();
-    expect(await page.locator(".story-body").innerText()).not.toEqual(previousBody);
+    await expect(page.locator(".story-choice").first()).toBeEnabled();
+    await expect(page.locator(".story-paper h1")).toBeFocused();
     await expect(page.getByLabel("上一轮选择")).toHaveText(`上一轮选择：${id} · ${previousText}`);
-    await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toBeVisible();
-    await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toContainText("EVENT ENGINE · MOCK");
+    await expect(page.getByLabel("Event Engine 选中的事件")).toBeVisible();
+    await expect(page.getByLabel("Event Engine 选中的事件")).toContainText("EVENT ENGINE · NEXT EVENT");
     await expect(page.locator(".story-choice")).toHaveCount(3);
     await expect(page.getByLabel("D · 自由行动")).toHaveValue("");
-    await expect(page.getByRole("status")).toContainText(`已选择 ${id}`);
-    const updatedStats = await stats.innerText();
-    expect(updatedStats).not.toEqual(previousStats);
-    previousStats = updatedStats;
+    await expect(page.getByRole("status")).toContainText("本回合已通过规则检查");
     expect(await page.locator(".game-context").innerText()).toEqual(initialContext);
     await noOverflow(page);
   }
+  const settledStats = await stats.innerText();
+  expect(settledStats).not.toEqual(initialStats);
   await page.getByRole("button", { name: "提交行动" }).click();
   await expect(page.locator("#action-error")).toHaveText("请先写下你想做的行动。");
   await page.getByLabel("D · 自由行动").fill("我把资料收好，继续自己的工作。");
-  await page.getByRole("button", { name: "提交行动" }).click();
-  await expect(page.getByRole("status")).toContainText("自由行动已收到");
-  await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
+  const submitAction = page.locator(".free-action button[type=submit]");
+  await submitAction.click();
+  await expect(submitAction).toBeEnabled();
+  await expect(page.getByRole("status")).toContainText("本回合已通过规则检查");
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
-  await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toBeVisible();
-  expect(await stats.innerText()).toEqual(previousStats);
+  await expect(page.getByLabel("Event Engine 选中的事件")).toBeVisible();
+  const persistedTitle = await page.locator(".story-paper h1").innerText();
   await noOverflow(page);
   await page.locator(".site-header").scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath("story.png"), fullPage: true });
@@ -101,16 +94,16 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.locator(".archived-action")).toHaveText("我把资料收好，继续自己的工作。");
   await noOverflow(page);
   await nav.getByRole("link", { name: "剧情", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
+  await expect(page.locator(".story-paper h1")).toHaveText(persistedTitle);
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
-  await expect(page.getByRole("status")).toContainText("自由行动已收到");
-  expect(await stats.innerText()).toEqual(previousStats);
+  await expect(page.getByRole("status")).toContainText("本回合已通过规则检查");
+  const persistedStats = await stats.innerText();
   await page.reload();
   await expect(page).toHaveURL(/\/game$/);
-  await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
+  await expect(page.locator(".story-paper h1")).toHaveText(persistedTitle);
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.locator(".context-details")).toContainText("前田陆（Riku）");
-  expect(await stats.innerText()).toEqual(previousStats);
+  expect(await stats.innerText()).toEqual(persistedStats);
   expect(errors).toEqual([]);
 });
 

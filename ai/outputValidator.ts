@@ -54,7 +54,7 @@ export function validateStoryOutput(raw: unknown, input: StoryGenerationInput): 
   const warnings: NarrativeValidationWarning[] = [];
   if (
     input.context.gameState.relationshipStage === "strangers"
-    && parsed.data.suggestedChoiceTags.includes("public_confession")
+    && parsed.data.suggestedOutcomeTags.includes("relationship_confirmed")
   ) warnings.push("relationship_stage_mismatch");
 
   return { success: true, data: parsed.data, warnings };
