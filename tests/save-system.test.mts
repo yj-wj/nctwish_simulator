@@ -101,6 +101,10 @@ function makeSaveData(name = "存档 A", maleLead: GameState["maleLead"] = "sion
     storyFlags: pipeline.storyFlags,
     memories: pipeline.memories,
     processedSettlementIds: pipeline.processedSettlementIds,
+    chatThreads: [],
+    chatMessages: [],
+    chatTurns: [],
+    incomingMessageTriggers: [],
     runtime: {
       playerConfirmed: true,
       characterConfirmed: true,
@@ -126,7 +130,7 @@ test("Save / Load round trip preserves every authoritative Phase 4 field", () =>
   const data = makeSaveData();
   const created = repository.createSave(data, "save-a");
   const loaded = repository.loadGame("save-a");
-  assert.equal(loaded.schemaVersion, 1);
+  assert.equal(loaded.schemaVersion, 2);
   assert.deepEqual(loaded.playerSetup, data.playerSetup);
   assert.deepEqual(loaded.gameState, data.gameState);
   assert.deepEqual(loaded.eventHistory, data.eventHistory);
@@ -158,6 +162,27 @@ test("Phase 5C generated story runtime survives Save / Load for refresh continua
   repository.createSave(data, "ai-turn-save");
   const loaded = repository.loadGame("ai-turn-save");
   assert.deepEqual(loaded.runtime.currentStory, data.runtime.currentStory);
+});
+
+test("schema v2 persists Chat and migrates schema v1 saves with empty Chat data", () => {
+  const { storage, repository } = repositoryHarness();
+  const data = makeSaveData("Chat 存档");
+  data.chatThreads = [{ id: "player:sion", playerId: "player", participantId: "sion", unreadCount: 1, lastReadSequence: 0, createdAt: "2026-10-22T10:00:00.000Z", updatedAt: "2026-10-22T10:00:00.000Z" }];
+  data.chatMessages = [{ id: "message-1", threadId: "player:sion", senderId: "sion", receiverId: "player", content: "到家了吗？", week: 12, sequence: 1, source: "ai", createdAt: "2026-10-22T10:00:00.000Z" }];
+  repository.createSave(data, "chat-v2");
+  const chatLoaded = repository.loadGame("chat-v2");
+  assert.equal(chatLoaded.schemaVersion, 2);
+  assert.equal(chatLoaded.chatMessages[0].content, "到家了吗？");
+
+  const legacy = structuredClone(repository.createSave(makeSaveData("旧存档"), "legacy-v1")) as unknown as Record<string, unknown>;
+  legacy.schemaVersion = 1;
+  delete legacy.chatThreads; delete legacy.chatMessages; delete legacy.chatTurns; delete legacy.incomingMessageTriggers;
+  storage.setItem(SAVE_STORAGE_KEYS.save("legacy-v1"), JSON.stringify(legacy));
+  const migrated = repository.loadGame("legacy-v1");
+  assert.equal(migrated.schemaVersion, 2);
+  assert.deepEqual(migrated.chatThreads, []);
+  assert.deepEqual(migrated.chatMessages, []);
+  assert.equal(JSON.parse(storage.getItem(SAVE_STORAGE_KEYS.save("legacy-v1"))!).schemaVersion, 2);
 });
 
 test("derived Ending Candidate is rebuilt from loaded facts instead of persisted", () => {

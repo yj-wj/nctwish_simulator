@@ -5,11 +5,14 @@ export const DEFAULT_AI_MODE: AIMode = "mock";
 export const AI_PROVIDER_DEFAULTS = {
   actionModel: "qwen3.7-flash",
   storyModel: "qwen3.7-plus",
+  chatModel: "qwen3.7-plus",
   enableThinking: false,
   actionMaxCompletionTokens: 650,
   storyMaxCompletionTokens: 2000,
+  chatMaxCompletionTokens: 900,
   actionTimeoutMs: 25_000,
   storyTimeoutMs: 40_000,
+  chatTimeoutMs: 30_000,
   maxRetries: 1,
 } as const;
 

@@ -197,6 +197,25 @@ const generatedStorySchema = z.object({
     importance: z.number().int().min(1).max(5),
   })),
 });
+const chatMessageSchema = z.object({
+  id: z.string().min(1), threadId: z.string().min(1), senderId: z.string().min(1), receiverId: z.string().min(1),
+  content: z.string().min(1), week: z.number().int().min(1), sequence: z.number().int().min(1),
+  source: z.enum(["player", "ai", "system"]), createdAt: z.iso.datetime(), turnId: z.string().optional(), settlementId: z.string().optional(),
+});
+const chatThreadSchema = z.object({
+  id: z.string().min(1), playerId: z.literal("player"), participantId: z.string().min(1), unreadCount: z.number().int().nonnegative(),
+  lastReadSequence: z.number().int().nonnegative(), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
+});
+const chatTurnSchema = z.object({
+  turnId: z.string().min(1), settlementId: z.string().min(1), threadId: z.string().min(1), week: z.number().int().min(1),
+  effectCategory: z.enum(["none", "relationship", "support", "conflict"]), meaningful: z.boolean(),
+  playerMessageId: z.string().optional(), aiMessageIds: z.array(z.string().min(1)),
+});
+const incomingMessageTriggerSchema = z.object({
+  id: z.string().min(1), threadId: z.string().min(1), senderId: z.string().min(1),
+  reason: z.enum(["relationship_confirmed_follow_up", "exposure_concern", "career_pressure_check_in"]),
+  contextTags: z.array(z.string()), week: z.number().int().min(1), status: z.enum(["pending", "delivered"]),
+});
 
 export const gameSaveDataSchema = z.object({
   playerSetup: playerDraftSchema,
@@ -207,6 +226,10 @@ export const gameSaveDataSchema = z.object({
   storyFlags: storyFlagsSchema,
   memories: z.array(memoryRecordSchema),
   processedSettlementIds: z.array(z.string().min(1)),
+  chatThreads: z.array(chatThreadSchema),
+  chatMessages: z.array(chatMessageSchema),
+  chatTurns: z.array(chatTurnSchema),
+  incomingMessageTriggers: z.array(incomingMessageTriggerSchema),
   runtime: z.object({
     playerConfirmed: z.boolean(),
     characterConfirmed: z.boolean(),

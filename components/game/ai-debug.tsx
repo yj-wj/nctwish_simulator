@@ -135,6 +135,7 @@ export function AIDebug() {
       <p><span>provider</span><b>{status?.provider ?? "unavailable"}</b></p>
       <p><span>ACTION_MODEL</span><b>{status?.actionModel ?? "unavailable"}</b></p>
       <p><span>STORY_MODEL</span><b>{status?.storyModel ?? "unavailable"}</b></p>
+      <p><span>CHAT_MODEL</span><b>{status?.chatModel ?? "unavailable"}</b></p>
       <p><span>configured</span><b>{status ? (status.configured ? "yes" : "no") : "unavailable"}</b></p>
       <p><span>thinking</span><b>{status ? String(status.enableThinking) : "unavailable"}</b></p>
     </div>

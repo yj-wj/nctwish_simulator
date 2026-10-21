@@ -70,7 +70,7 @@ export function createSaveRepository(
   const persistValidated = (save: GameSave): GameSave => {
     const result = gameSaveSchema.safeParse(save);
     if (!result.success) {
-      throw new SaveRepositoryError("invalid_schema", "Game save does not match schema version 1.");
+      throw new SaveRepositoryError("invalid_schema", `Game save does not match schema version ${GAME_SAVE_SCHEMA_VERSION}.`);
     }
     const validated = result.data as GameSave;
     storage.setItem(SAVE_STORAGE_KEYS.save(validated.saveId), JSON.stringify(validated));
@@ -91,17 +91,22 @@ export function createSaveRepository(
     if (!envelope.success) {
       throw new SaveRepositoryError("invalid_schema", `Save ${saveId} is missing schemaVersion.`);
     }
-    if (envelope.data.schemaVersion !== GAME_SAVE_SCHEMA_VERSION) {
+    if (envelope.data.schemaVersion !== 1 && envelope.data.schemaVersion !== GAME_SAVE_SCHEMA_VERSION) {
       throw new SaveRepositoryError(
         "unsupported_version",
         `Save ${saveId} uses unsupported schema version ${envelope.data.schemaVersion}.`,
       );
     }
-    const result = gameSaveSchema.safeParse(parsed);
+    const migrated = envelope.data.schemaVersion === 1 && parsed && typeof parsed === "object"
+      ? { ...(parsed as Record<string, unknown>), schemaVersion: GAME_SAVE_SCHEMA_VERSION, chatThreads: [], chatMessages: [], chatTurns: [], incomingMessageTriggers: [] }
+      : parsed;
+    const result = gameSaveSchema.safeParse(migrated);
     if (!result.success) {
       throw new SaveRepositoryError("invalid_schema", `Save ${saveId} failed schema validation.`);
     }
-    return result.data as GameSave;
+    const validated = result.data as GameSave;
+    if (envelope.data.schemaVersion === 1) storage.setItem(SAVE_STORAGE_KEYS.save(saveId), JSON.stringify(validated));
+    return validated;
   };
 
   return {

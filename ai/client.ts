@@ -1,11 +1,13 @@
 import type { AIProviderResult } from "./provider";
 import type { ActionInterpretationInput, ActionInterpretationOutput, StoryGenerationInput, StoryGenerationOutput } from "./schemas";
+import type { ChatGenerationInput, ChatGenerationOutput } from "./chatSchemas";
 
 export interface PublicAIStatus {
   mode: "mock" | "qwen";
   provider: "mock" | "qwen";
   actionModel: string;
   storyModel: string;
+  chatModel: string;
   configured: boolean;
   enableThinking: boolean;
   missing: Array<"apiKey" | "baseUrl">;
@@ -68,4 +70,8 @@ export async function interpretActionWithServer(input: ActionInterpretationInput
 
 export async function generateStoryWithServer(input: StoryGenerationInput): Promise<AIProviderResult<StoryGenerationOutput>> {
   return readResponse(await fetch("/api/ai/generate-story", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }));
+}
+
+export async function generateChatWithServer(input: ChatGenerationInput): Promise<AIProviderResult<ChatGenerationOutput>> {
+  return readResponse(await fetch("/api/ai/generate-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }));
 }

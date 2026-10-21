@@ -6,6 +6,8 @@ import { createQwenJSONSchema } from "../jsonSchema.ts";
 import { validateActionInterpretationOutput } from "../actionValidator.ts";
 import { validateStoryOutput } from "../outputValidator.ts";
 import type { QwenServerConfig } from "./serverConfig.ts";
+import { chatGenerationInputSchema, chatGenerationOutputSchema, type ChatGenerationInput, type ChatGenerationOutput } from "../chatSchemas.ts";
+import { buildChatPrompt } from "../prompts/chatPrompt.ts";
 
 export type QwenErrorCode = "network_error" | "timeout" | "authentication_error" | "rate_limit" | "upstream_error" | "malformed_response" | "schema_validation_error";
 
@@ -153,6 +155,35 @@ export class QwenAIProvider implements AIProvider {
       }
     }
     throw new QwenProviderError("schema_validation_error", "Story validation failed.", 502, false, this.config.storyModel, 0);
+  }
+
+  async generateChat(rawInput: ChatGenerationInput): Promise<AIProviderResult<ChatGenerationOutput>> {
+    const input = chatGenerationInputSchema.parse(rawInput);
+    const prompt = buildChatPrompt(input);
+    for (let schemaAttempt = 0; schemaAttempt <= this.config.maxRetries; schemaAttempt += 1) {
+      const response = await this.request({
+        model: this.config.chatModel,
+        timeoutMs: this.config.chatTimeoutMs,
+        maxCompletionTokens: this.config.chatMaxCompletionTokens,
+        messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }],
+        responseFormat: createQwenJSONSchema("chat_generation", chatGenerationOutputSchema),
+      });
+      let parsed: unknown;
+      try {
+        parsed = this.parseContent(response.body, response.model, response.latencyMs);
+      } catch (error) {
+        if (error instanceof QwenProviderError && error.code === "malformed_response" && schemaAttempt < this.config.maxRetries) continue;
+        throw error;
+      }
+      const validation = chatGenerationOutputSchema.safeParse(parsed);
+      if (validation.success) {
+        return { data: validation.data, metadata: { provider: "qwen", model: response.model, latencyMs: response.latencyMs, usage: usageOf(response.body), success: true } };
+      }
+      if (schemaAttempt === this.config.maxRetries) {
+        throw new QwenProviderError("schema_validation_error", `Chat output failed validation: ${validation.error.issues.map((issue) => issue.message).join(" | ")}`, 502, false, response.model, response.latencyMs);
+      }
+    }
+    throw new QwenProviderError("schema_validation_error", "Chat validation failed.", 502, false, this.config.chatModel, 0);
   }
 
   private parseContent(body: QwenResponseBody, model: string, latencyMs: number): unknown {

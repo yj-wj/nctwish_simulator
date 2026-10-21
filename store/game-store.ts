@@ -6,7 +6,7 @@ import { getHistoryTestFixture } from "@/config/history-fixtures";
 import { initialStoryFlags } from "@/config/history";
 import { mockChoiceEffects } from "@/config/mock-choice-effects";
 import { generatedChoiceDefaults } from "@/config/turn-policy";
-import { generateStoryWithServer, interpretActionWithServer, AIClientError } from "@/ai/client";
+import { generateChatWithServer, generateStoryWithServer, interpretActionWithServer, AIClientError } from "@/ai/client";
 import { createInitialGameState } from "@/game/create-initial-game-state";
 import { createEventHistoryEntry, runEventEngine } from "@/game/eventEngine";
 import { evaluateAction } from "@/game/ruleEngine";
@@ -15,6 +15,8 @@ import { setGameStateForDebug, settleChoice } from "@/game/stateEngine";
 import { createTurnId, executeTurnTransaction, TurnEngineError } from "@/game/turnEngine";
 import { getRelationshipStage } from "@/game/relationship";
 import { appendRecentStoryOpening, extractStoryOpening } from "@/game/contextBuilder";
+import { executeChatTransaction, getChatThreadId } from "@/game/chatEngine";
+import { incomingMessageFixtures } from "@/config/chat";
 import { mockStories } from "@/mocks/story";
 import { createLocalStorageAdapter } from "@/storage/localStorageAdapter";
 import { createSaveRepository, SaveRepositoryError, type SaveRepository } from "@/storage/saveRepository";
@@ -28,6 +30,7 @@ import type { StateChangeLogEntry } from "@/types/state";
 import type { ActionReceipt, StoryChoice } from "@/types/ui";
 import type { StoryGenerationOutput } from "@/ai/schemas";
 import type { AIBadcaseRecord, TurnDomainState, TurnPlayerInput, TurnStatus, TurnTrace } from "@/types/turn";
+import type { ChatDomainState, ChatMessage, ChatThread, ChatTurnRecord, ChatTurnStatus, ChatTurnTrace, IncomingMessageTrigger } from "@/types/chat";
 
 const initialDraft: PlayerDraft = {
   name: "",
@@ -67,6 +70,17 @@ const initialEventUI = {
   memories: [] as MemoryRecord[],
 };
 
+const initialChatUI = {
+  chatThreads: [] as ChatThread[],
+  chatMessages: [] as ChatMessage[],
+  chatTurns: [] as ChatTurnRecord[],
+  incomingMessageTriggers: [] as IncomingMessageTrigger[],
+  chatInput: "",
+  chatStatus: "idle" as ChatTurnStatus,
+  chatError: null as string | null,
+  lastChatTrace: null as ChatTurnTrace | null,
+};
+
 let browserSaveRepository: SaveRepository | null = null;
 
 function getSaveRepository(): SaveRepository {
@@ -95,6 +109,14 @@ export interface GameStore {
   activeTurnId: string | null;
   lastTurnTrace: TurnTrace | null;
   aiBadcases: AIBadcaseRecord[];
+  chatThreads: ChatThread[];
+  chatMessages: ChatMessage[];
+  chatTurns: ChatTurnRecord[];
+  incomingMessageTriggers: IncomingMessageTrigger[];
+  chatInput: string;
+  chatStatus: ChatTurnStatus;
+  chatError: string | null;
+  lastChatTrace: ChatTurnTrace | null;
   eventHistory: EventHistoryEntry[];
   selectedEventId: string | null;
   eventEngineResult: EventEngineResult | null;
@@ -120,6 +142,11 @@ export interface GameStore {
   advanceMockStory: (id: StoryChoice["id"]) => void;
   processPresetChoice: (id: StoryChoice["id"]) => Promise<boolean>;
   processFreeAction: () => Promise<boolean>;
+  setChatInput: (text: string) => void;
+  sendChatMessage: (threadId: string) => Promise<boolean>;
+  markChatRead: (threadId: string) => void;
+  enqueueIncomingFixture: (fixtureId: string) => void;
+  processPendingIncoming: () => Promise<boolean>;
   setFreeAction: (text: string) => void;
   setAffection: (affection: number) => void;
   setDebugStat: (stat: StatId, value: number) => void;
@@ -152,6 +179,10 @@ function getSaveData(state: GameStore): GameSaveData | null {
     storyFlags: { ...state.storyFlags },
     memories: state.memories,
     processedSettlementIds: state.processedSettlementIds,
+    chatThreads: state.chatThreads,
+    chatMessages: state.chatMessages,
+    chatTurns: state.chatTurns,
+    incomingMessageTriggers: state.incomingMessageTriggers,
     runtime: {
       playerConfirmed: state.playerConfirmed,
       characterConfirmed: state.characterConfirmed,
@@ -191,6 +222,14 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
     activeTurnId: null,
     lastTurnTrace: null,
     aiBadcases: [],
+    chatThreads: save.chatThreads,
+    chatMessages: save.chatMessages,
+    chatTurns: save.chatTurns,
+    incomingMessageTriggers: save.incomingMessageTriggers,
+    chatInput: "",
+    chatStatus: "idle",
+    chatError: null,
+    lastChatTrace: null,
     eventEngineResult: null,
     stateChangeLog: [],
     weeklyHistory: save.weeklyStateHistory,
@@ -397,6 +436,120 @@ export const useGameStore = create<GameStore>()((set, get) => {
     }
   };
 
+  const runChatTurn = async (
+    snapshot: GameStore,
+    input: Parameters<typeof executeChatTransaction>[1],
+  ): Promise<boolean> => {
+    if (!snapshot.gameState) return false;
+    const domain: ChatDomainState = {
+      gameState: snapshot.gameState,
+      eventHistory: snapshot.eventHistory,
+      choiceHistory: snapshot.choiceHistory,
+      weeklyHistory: snapshot.weeklyHistory,
+      storyFlags: snapshot.storyFlags,
+      memories: snapshot.memories,
+      processedSettlementIds: snapshot.processedSettlementIds,
+      chatThreads: snapshot.chatThreads,
+      chatMessages: snapshot.chatMessages,
+      chatTurns: snapshot.chatTurns,
+    };
+    set({ chatStatus: "generating", chatError: null });
+    try {
+      await executeChatTransaction(domain, input, {
+        generateChat: generateChatWithServer,
+        onStatus: (chatStatus) => set({ chatStatus }),
+      }, {
+        persist: (result) => {
+          const incomingMessageTriggers = input.kind === "incoming"
+            ? snapshot.incomingMessageTriggers.map((trigger) => trigger.id === input.trigger.id ? { ...trigger, status: "delivered" as const } : trigger)
+            : snapshot.incomingMessageTriggers;
+          const patch: Partial<GameStore> = {
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            choiceHistory: result.choiceHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            chatThreads: result.chatThreads,
+            chatMessages: result.chatMessages,
+            chatTurns: result.chatTurns,
+            incomingMessageTriggers,
+            stateChangeLog: result.stateChangeLog ? [...snapshot.stateChangeLog, result.stateChangeLog] : snapshot.stateChangeLog,
+            chatInput: input.kind === "player_message" ? "" : snapshot.chatInput,
+          };
+          const data = getSaveData({ ...snapshot, ...patch } as GameStore);
+          if (!data) throw new SaveRepositoryError("invalid_schema", "Chat turn produced no saveable state.");
+          return writeSaveData(data, snapshot);
+        },
+        commit: (result, persisted) => {
+          const saved = persisted as GameSave;
+          const incomingMessageTriggers = input.kind === "incoming"
+            ? snapshot.incomingMessageTriggers.map((trigger) => trigger.id === input.trigger.id ? { ...trigger, status: "delivered" as const } : trigger)
+            : snapshot.incomingMessageTriggers;
+          const rejectedSuggestions = [
+            ...result.trace.proposal.effects.rejected.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
+            ...result.trace.proposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
+            ...result.trace.proposal.rejectedOutcomeTags.map((tag) => `outcomeTag:${tag}`),
+            ...result.trace.proposal.rejectedMemories.map(({ summary, reason }) => `memory:${summary}:${reason}`),
+            ...(result.trace.proposal.spamLimited ? ["relationship_effect:chat_spam_cooldown"] : []),
+          ];
+          const rejectionBadcase: AIBadcaseRecord | null = rejectedSuggestions.length ? {
+            turnId: result.turnId,
+            model: result.trace.metadata.model,
+            playerAction: input.kind === "player_message" ? input.content : input.trigger.reason,
+            relationshipStage: getRelationshipStage(result.trace.beforeState.stats.affection).id,
+            errorType: "rejected_chat_suggestion",
+            validationErrors: [], rejectedSuggestions, occurredAt: new Date().toISOString(),
+          } : null;
+          set({
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            choiceHistory: result.choiceHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            chatThreads: result.chatThreads,
+            chatMessages: result.chatMessages,
+            chatTurns: result.chatTurns,
+            incomingMessageTriggers,
+            stateChangeLog: result.stateChangeLog ? [...snapshot.stateChangeLog, result.stateChangeLog] : snapshot.stateChangeLog,
+            chatInput: input.kind === "player_message" ? "" : snapshot.chatInput,
+            chatStatus: "completed",
+            chatError: null,
+            lastChatTrace: result.trace,
+            aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
+              ? [...snapshot.aiBadcases, rejectionBadcase]
+              : snapshot.aiBadcases,
+            activeSaveId: saved.saveId,
+            activeSaveCreatedAt: saved.createdAt,
+            activeSaveUpdatedAt: saved.updatedAt,
+            saveSummaries: getSaveRepository().listSaves(),
+            saveError: null,
+          });
+        },
+      });
+      return true;
+    } catch (error) {
+      const inputError = error instanceof TurnEngineError && error.code === "invalid_action";
+      set((current) => ({
+        chatStatus: "error",
+        chatError: inputError ? error.message : "消息发送失败，请重试。",
+        aiBadcases: process.env.NODE_ENV === "development" ? [...current.aiBadcases, {
+          turnId: input.kind === "incoming" ? `chat:${input.trigger.id}` : `chat:${input.threadId}:failed`,
+          model: error instanceof AIClientError ? error.metadata?.model ?? "unavailable" : "unavailable",
+          playerAction: input.kind === "player_message" ? input.content : input.trigger.reason,
+          relationshipStage: getRelationshipStage(snapshot.gameState!.stats.affection).id,
+          errorType: error instanceof AIClientError ? error.code : error instanceof TurnEngineError ? error.code : "chat_error",
+          validationErrors: [error instanceof Error ? error.message : "Unknown chat error"],
+          rejectedSuggestions: [], occurredAt: new Date().toISOString(),
+        }] : current.aiBadcases,
+      }));
+      return false;
+    }
+  };
+
   return {
       draft: { ...initialDraft },
       gameState: null,
@@ -411,6 +564,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
       saveError: null,
       ...initialStoryUI,
       ...initialEventUI,
+      ...initialChatUI,
       patchDraft: (patch) =>
         set((state) => ({
           draft: { ...state.draft, ...patch },
@@ -420,6 +574,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
+          ...initialChatUI,
         })),
       confirmPlayer: (draft) => saveAfter(() => {
         set({
@@ -430,6 +585,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
+          ...initialChatUI,
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -444,6 +600,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
+          ...initialChatUI,
         })),
       confirmCharacter: () => {
         const { draft, gameState } = get();
@@ -543,6 +700,39 @@ export const useGameStore = create<GameStore>()((set, get) => {
         if (!state.gameState || ["interpreting", "generating", "validating", "settling"].includes(state.turnStatus)) return false;
         const input: TurnPlayerInput = { kind: "free_action", text: state.freeAction };
         return runFormalTurn(state, input, null);
+      },
+      setChatInput: (chatInput) => set({ chatInput }),
+      sendChatMessage: async (threadId) => {
+        const state = get();
+        if (!state.gameState || ["generating", "validating", "settling"].includes(state.chatStatus)) return false;
+        return runChatTurn(state, { kind: "player_message", threadId, content: state.chatInput });
+      },
+      markChatRead: (threadId) => {
+        const state = get();
+        const thread = state.chatThreads.find(({ id }) => id === threadId);
+        if (!thread || thread.unreadCount === 0) return;
+        saveAfter(() => set({ chatThreads: state.chatThreads.map((item) => item.id === threadId ? { ...item, unreadCount: 0, lastReadSequence: state.chatMessages.filter((message) => message.threadId === threadId).reduce((max, message) => Math.max(max, message.sequence), 0) } : item) }));
+      },
+      enqueueIncomingFixture: (fixtureId) => {
+        if (process.env.NODE_ENV !== "development") return;
+        const state = get();
+        if (!state.gameState) return;
+        const fixture = incomingMessageFixtures.find(({ id }) => id === fixtureId);
+        if (!fixture) return;
+        const id = `incoming:${state.gameState.gameId}:${state.gameState.week}:${fixture.id}`;
+        if (state.incomingMessageTriggers.some((trigger) => trigger.id === id)) return;
+        const trigger: IncomingMessageTrigger = {
+          id, threadId: getChatThreadId(state.gameState.maleLead), senderId: state.gameState.maleLead,
+          reason: fixture.reason, contextTags: [...fixture.tags], week: state.gameState.week, status: "pending",
+        };
+        saveAfter(() => set({ incomingMessageTriggers: [...state.incomingMessageTriggers, trigger] }));
+      },
+      processPendingIncoming: async () => {
+        const state = get();
+        if (!state.gameState || ["generating", "validating", "settling"].includes(state.chatStatus)) return false;
+        const threadId = getChatThreadId(state.gameState.maleLead);
+        const trigger = state.incomingMessageTriggers.find((item) => item.threadId === threadId && item.status === "pending");
+        return trigger ? runChatTurn(state, { kind: "incoming", trigger }) : false;
       },
       setFreeAction: (freeAction) => set({ freeAction }),
       setAffection: (affection) =>
@@ -751,6 +941,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               entered: false,
               ...initialStoryUI,
               ...initialEventUI,
+              ...initialChatUI,
               activeSaveId: null,
               activeSaveCreatedAt: null,
               activeSaveUpdatedAt: null,
@@ -778,6 +969,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           entered: false,
           ...initialStoryUI,
           ...initialEventUI,
+          ...initialChatUI,
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -802,6 +994,10 @@ export const useGameStore = create<GameStore>()((set, get) => {
             storyFlags: { ...initialStoryFlags },
             memories: [],
             processedSettlementIds: [],
+            chatThreads: [],
+            chatMessages: [],
+            chatTurns: [],
+            incomingMessageTriggers: [],
             runtime: {
               playerConfirmed: true,
               characterConfirmed: false,

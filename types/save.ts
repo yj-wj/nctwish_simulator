@@ -4,8 +4,9 @@ import type { ChoiceHistoryRecord, StoryFlagState, WeeklyStateSnapshot } from ".
 import type { MemoryRecord } from "./memory";
 import type { ActionReceipt, StoryChoice } from "./ui";
 import type { StoryGenerationOutput } from "../ai/schemas";
+import type { ChatMessage, ChatThread, ChatTurnRecord, IncomingMessageTrigger } from "./chat";
 
-export const GAME_SAVE_SCHEMA_VERSION = 1 as const;
+export const GAME_SAVE_SCHEMA_VERSION = 2 as const;
 
 export interface GameSaveRuntime {
   playerConfirmed: boolean;
@@ -33,6 +34,10 @@ export interface GameSaveData {
   storyFlags: StoryFlagState;
   memories: MemoryRecord[];
   processedSettlementIds: string[];
+  chatThreads: ChatThread[];
+  chatMessages: ChatMessage[];
+  chatTurns: ChatTurnRecord[];
+  incomingMessageTriggers: IncomingMessageTrigger[];
   runtime: GameSaveRuntime;
 }
 

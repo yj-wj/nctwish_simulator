@@ -5,11 +5,14 @@ export interface QwenServerConfig {
   baseUrl: string;
   actionModel: string;
   storyModel: string;
+  chatModel: string;
   enableThinking: boolean;
   actionMaxCompletionTokens: number;
   storyMaxCompletionTokens: number;
+  chatMaxCompletionTokens: number;
   actionTimeoutMs: number;
   storyTimeoutMs: number;
+  chatTimeoutMs: number;
   maxRetries: number;
 }
 
@@ -21,6 +24,7 @@ export interface ServerAIConfig {
     provider: "mock" | "qwen";
     actionModel: string;
     storyModel: string;
+    chatModel: string;
     configured: boolean;
     enableThinking: boolean;
     missing: Array<"apiKey" | "baseUrl">;
@@ -42,6 +46,7 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
   }
   const actionModel = env.ACTION_MODEL?.trim() || AI_PROVIDER_DEFAULTS.actionModel;
   const storyModel = env.STORY_MODEL?.trim() || AI_PROVIDER_DEFAULTS.storyModel;
+  const chatModel = env.CHAT_MODEL?.trim() || storyModel;
   const apiKey = env.DASHSCOPE_API_KEY?.trim() || "";
   const baseUrl = env.DASHSCOPE_BASE_URL?.trim() || "";
   const missing: Array<"apiKey" | "baseUrl"> = [];
@@ -53,11 +58,14 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
     baseUrl,
     actionModel,
     storyModel,
+    chatModel,
     enableThinking: AI_PROVIDER_DEFAULTS.enableThinking,
     actionMaxCompletionTokens: AI_PROVIDER_DEFAULTS.actionMaxCompletionTokens,
     storyMaxCompletionTokens: AI_PROVIDER_DEFAULTS.storyMaxCompletionTokens,
+    chatMaxCompletionTokens: AI_PROVIDER_DEFAULTS.chatMaxCompletionTokens,
     actionTimeoutMs: AI_PROVIDER_DEFAULTS.actionTimeoutMs,
     storyTimeoutMs: AI_PROVIDER_DEFAULTS.storyTimeoutMs,
+    chatTimeoutMs: AI_PROVIDER_DEFAULTS.chatTimeoutMs,
     maxRetries: AI_PROVIDER_DEFAULTS.maxRetries,
   } : null;
   return {
@@ -68,6 +76,7 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
       provider: rawMode,
       actionModel,
       storyModel,
+      chatModel,
       configured,
       enableThinking: AI_PROVIDER_DEFAULTS.enableThinking,
       missing,

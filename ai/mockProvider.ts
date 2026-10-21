@@ -1,6 +1,7 @@
 import type { AIProvider } from "./provider.ts";
 import type { ActionInterpretationInput, ActionInterpretationOutput, StoryGenerationInput, StoryGenerationOutput } from "./schemas.ts";
 import { actionInterpretationInputSchema, actionInterpretationOutputSchema, storyGenerationInputSchema, storyGenerationOutputSchema } from "./schemas.ts";
+import { chatGenerationInputSchema, chatGenerationOutputSchema, type ChatGenerationInput, type ChatGenerationOutput } from "./chatSchemas.ts";
 
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
@@ -86,6 +87,30 @@ export class MockAIProvider implements AIProvider {
         success: true as const,
       },
     };
+  }
+
+  async generateChat(rawInput: ChatGenerationInput) {
+    const input = chatGenerationInputSchema.parse(rawInput);
+    const text = input.playerMessage ?? "";
+    const intimate = /宝宝|去你家|睡|爱你|想你/.test(text);
+    const important = /不要突然消失|害怕.*失联|希望你以后/.test(text);
+    const mismatch = input.context.ruleEvaluation.violatedRules.includes("relationshipMismatch");
+    const messages = input.mode === "incoming"
+      ? [input.incomingReason === "exposure_concern" ? "刚才的事我看到了。你现在还好吗？" : input.incomingReason === "career_pressure_check_in" ? "今天应该很累吧。忙完记得告诉我一声。" : "刚才没来得及好好说。你到家了吗？"]
+      : mismatch || (intimate && input.context.gameState.relationshipStage === "strangers")
+        ? ["我们还没有熟到可以这样说。", "如果有事情，可以直接讲。"]
+        : /晚安/.test(text)
+          ? ["晚安。早点休息。"]
+          : ["看到了。", "你不用担心，我忙完会回复。"];
+    const output: ChatGenerationOutput = {
+      messages,
+      effectCategory: important ? "relationship" : "none",
+      suggestedEffects: important ? [{ stat: "affection", magnitude: "small_positive", reason: "玩家清楚表达了重要的关系需求。" }] : [],
+      suggestedChoiceTags: important ? ["maintain_relationship"] : [],
+      suggestedOutcomeTags: [],
+      memoryCandidates: important ? [{ type: "relationship", summary: "玩家明确表示自己害怕重要的人突然失联。", actors: ["player", input.context.maleLead.id], tags: ["relationship", "communication"], importance: 4 }] : [],
+    };
+    return { data: chatGenerationOutputSchema.parse(output), metadata: { provider: "mock" as const, model: "mock-chat-v1", latencyMs: 0, usage: { inputTokens: null, outputTokens: null, totalTokens: null }, success: true as const } };
   }
 }
 

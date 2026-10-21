@@ -73,8 +73,11 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
 
   const nav = page.getByRole("navigation", { name: "游戏导航" });
   await nav.getByRole("link", { name: "消息", exact: true }).click();
-  await page.getByRole("button", { name: "妈妈 家人" }).click();
-  await expect(page.getByText("最近生活还习惯吗？", { exact: true })).toBeVisible();
+  await page.getByLabel("聊天消息").fill("晚安。");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(
+    page.getByText("我们还没有熟到可以这样说。", { exact: true }),
+  ).toBeVisible();
   await noOverflow(page);
   await nav.getByRole("link", { name: "SNS", exact: true }).click();
   const like = page.getByRole("button", { name: "赞 花园里的观众" });
@@ -104,6 +107,10 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.locator(".context-details")).toContainText("前田陆（Riku）");
   expect(await stats.innerText()).toEqual(persistedStats);
+  await page.getByRole("navigation", { name: "游戏导航" }).getByRole("link", { name: "消息", exact: true }).click();
+  await expect(
+    page.getByText("我们还没有熟到可以这样说。", { exact: true }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });
 

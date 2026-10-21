@@ -4,6 +4,7 @@ import type {
   StoryGenerationInput,
   StoryGenerationOutput,
 } from "./schemas.ts";
+import type { ChatGenerationInput, ChatGenerationOutput } from "./chatSchemas.ts";
 
 export interface AIUsage {
   inputTokens: number | null;
@@ -28,4 +29,5 @@ export interface AIProvider {
   readonly id: string;
   generateStory(input: StoryGenerationInput): Promise<AIProviderResult<StoryGenerationOutput>>;
   interpretAction(input: ActionInterpretationInput): Promise<AIProviderResult<ActionInterpretationOutput>>;
+  generateChat(input: ChatGenerationInput): Promise<AIProviderResult<ChatGenerationOutput>>;
 }

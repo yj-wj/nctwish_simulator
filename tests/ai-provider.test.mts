@@ -6,6 +6,9 @@ import { QwenAIProvider, QwenProviderError } from "../ai/server/qwenProvider.ts"
 import { createServerAIProvider } from "../ai/server/providerFactory.ts";
 import type { QwenServerConfig } from "../ai/server/serverConfig.ts";
 import { actionInterpretationOutputSchema, storyGenerationOutputSchema } from "../ai/schemas.ts";
+import { chatGenerationOutputSchema } from "../ai/chatSchemas.ts";
+import { buildChatContext } from "../game/chatContextBuilder.ts";
+import { evaluateAction } from "../game/ruleEngine.ts";
 import { buildActionInterpretationInput, buildStoryGenerationInput } from "../game/contextBuilder.ts";
 import type { EventHistoryEntry } from "../types/event.ts";
 import type { GameState } from "../types/game.ts";
@@ -42,11 +45,14 @@ function config(overrides: Partial<QwenServerConfig> = {}): QwenServerConfig {
     baseUrl: "https://workspace.example.com/compatible-mode/v1",
     actionModel: "qwen3.7-flash",
     storyModel: "qwen3.7-plus",
+    chatModel: "qwen3.7-plus",
     enableThinking: false,
     actionMaxCompletionTokens: 650,
     storyMaxCompletionTokens: 2000,
+    chatMaxCompletionTokens: 900,
     actionTimeoutMs: 1000,
     storyTimeoutMs: 1000,
+    chatTimeoutMs: 1000,
     maxRetries: 1,
     ...overrides,
   };
@@ -71,6 +77,10 @@ const validStory = {
   suggestedChoiceTags: ["keep_distance"],
   suggestedOutcomeTags: [],
   memoryCandidates: [{ type: "short_term", summary: "玩家在人群中主动保持距离。", actors: ["player", "sion"], tags: ["privacy"], importance: 2 }],
+};
+const validChat = {
+  messages: ["看到了。", "忙完我会回复。"], effectCategory: "none",
+  suggestedEffects: [], suggestedChoiceTags: [], suggestedOutcomeTags: [], memoryCandidates: [],
 };
 
 function response(content: unknown, model: string, usage = { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 }, status = 200) {
@@ -138,6 +148,26 @@ test("valid story passes local validation and preserves token metadata", async (
 test("invalid story output is rejected locally", async () => {
   const provider = new QwenAIProvider(config(), async () => response({ ...validStory, finalAffection: 99 }, "qwen3.7-plus"));
   await assert.rejects(() => provider.generateStory(storyInput()), (error: unknown) => error instanceof QwenProviderError && error.code === "schema_validation_error");
+});
+
+test("valid Chat uses configured chat model, compact prompt and strict schema", async () => {
+  let requestBody = "";
+  const provider = new QwenAIProvider(config(), async (_url, init) => {
+    requestBody = String(init?.body);
+    return response(validChat, "qwen3.7-plus");
+  });
+  const rule = evaluateAction(state, { type: "privateMessage", romanticIntensity: "low", physicalIntimacy: "none", publicExposure: "none", professionalBoundary: "respected" });
+  const input = buildChatContext({
+    gameState: state, eventHistory: [], choiceHistory: [], weeklyHistory: [], storyFlags: flags,
+    memories: [], processedSettlementIds: [], chatThreads: [], chatMessages: [], chatTurns: [],
+  }, { kind: "player_message", threadId: "player:sion", content: "今天是不是很累？" }, rule);
+  const result = await provider.generateChat(input);
+  assert.equal(chatGenerationOutputSchema.safeParse(result.data).success, true);
+  const sent = JSON.parse(requestBody);
+  assert.equal(sent.model, "qwen3.7-plus");
+  assert.equal(sent.max_completion_tokens, 900);
+  assert.match(sent.messages[0].content, /1-4 short, natural chat messages/);
+  assert.match(sent.messages[0].content, /Do not reopen with Seoul weather/);
 });
 
 test("Qwen payload excludes player-invisible Hidden Memory and results never expose the API key", async () => {
