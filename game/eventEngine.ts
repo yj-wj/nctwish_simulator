@@ -6,6 +6,7 @@ import {
   relationshipStageEventWeights,
   triggerCategoryEventWeights,
 } from "../config/event-weight-modifiers.ts";
+import { worldEventWeightPolicy } from "../config/world-triggers.ts";
 import type {
   EventEngineContext,
   EventEngineResult,
@@ -33,10 +34,21 @@ function getFilterReasons(
   gameState: GameState,
   matchedTriggers: SpecialTriggerMatch[],
   history: EventHistoryEntry[],
+  context: EventEngineContext,
 ): EventFilterReason[] {
   const reasons: EventFilterReason[] = [];
   const stage = getRelationshipStage(gameState.stats.affection);
   const triggerIds = new Set(matchedTriggers.map(({ id }) => id));
+
+  const requiredNPCs = event.actorIds?.filter((id) => id.startsWith("npc:")) ?? [];
+  const activatedByRule = (id: string) =>
+    (id === "npc:manager" && triggerIds.has("company_intervention")) ||
+    (["npc:fandom-key-person", "npc:fandom-friend"].includes(id) && triggerIds.has("exposure_crisis")) ||
+    (id === "npc:friend" && triggerIds.has("emotional_breakdown")) ||
+    (["npc:mother", "npc:father"].includes(id) && triggerIds.has("player_recognized"));
+  if (requiredNPCs.length && context.world && requiredNPCs.some((id) => !context.world!.activeNpcIds.includes(id as never) && !activatedByRule(id))) {
+    reasons.push({ code: "inactiveParticipant", detail: "事件所需 NPC 尚未进入当前世界状态。" });
+  }
 
   if (event.relationshipStages && !event.relationshipStages.includes(stage.id)) {
     reasons.push({ code: "relationshipStage", detail: `当前关系阶段 ${stage.name} 不在事件允许范围内。` });
@@ -91,7 +103,7 @@ export function getEligibleEvents(
   const filteredEvents: FilteredEvent[] = [];
 
   for (const event of templates) {
-    const reasons = getFilterReasons(event, gameState, matchedTriggers, history);
+    const reasons = getFilterReasons(event, gameState, matchedTriggers, history, context);
     if (reasons.length === 0) eligibleEvents.push(event);
     else filteredEvents.push({ event, reasons });
   }
@@ -124,6 +136,7 @@ export function calculateEventWeight(
   ruleEvaluation: TriggerRuleContext,
   history: EventHistoryEntry[] = [],
   recentWindow: number = eventWeightPolicy.recentWindow,
+  world: EventEngineContext["world"] = undefined,
 ): EventWeightBreakdown {
   const stage = getRelationshipStage(gameState.stats.affection);
   const gameModeModifier = gameModeEventWeights[gameState.gameMode][event.category];
@@ -134,12 +147,20 @@ export function calculateEventWeight(
     .slice(-Math.max(0, recentWindow))
     .some(({ eventId }) => eventId === event.id);
   const recentEventPenalty = appearedRecently ? eventWeightPolicy.recentEventPenalty : 1;
+  let worldModifier = 1;
+  if (world?.pendingStoryEventIds.includes(event.id)) worldModifier *= worldEventWeightPolicy.pendingStoryEvent;
+  if (event.actorIds?.some((id) => id.startsWith("npc:") && world?.activeNpcIds.includes(id as never))) worldModifier *= worldEventWeightPolicy.activeParticipant;
+  if (world?.activeCrisisIds.length && event.category === "crisis") worldModifier *= worldEventWeightPolicy.crisisCategory;
+  if (["rumor", "controversy", "crisis"].includes(world?.snsLevel ?? "normal") && event.category === "publicOpinion") worldModifier *= worldEventWeightPolicy.publicOpinionFromSNS;
+  if (world?.pendingTriggerTypes.includes("company_intervention") && event.category === "company") worldModifier *= worldEventWeightPolicy.companyFromWorld;
+  if (world?.recentChatOutcomeTags.some((tag) => tag !== "none") && event.category === "relationship") worldModifier *= worldEventWeightPolicy.relationshipFromChat;
   const rawWeight = event.baseWeight
     * gameModeModifier
     * relationshipModifier
     * triggerModifier
     * careerStageModifier
-    * recentEventPenalty;
+    * recentEventPenalty
+    * worldModifier;
 
   return {
     baseWeight: event.baseWeight,
@@ -148,6 +169,7 @@ export function calculateEventWeight(
     triggerModifier,
     careerStageModifier,
     recentEventPenalty,
+    worldModifier: Number(worldModifier.toFixed(4)),
     finalWeight: Number(Math.max(0, rawWeight).toFixed(4)),
   };
 }
@@ -194,7 +216,7 @@ export function runEventEngine(
   const ruleContext = { matchedTriggers: eligibility.matchedTriggers };
   const eligibleEvents = eligibility.eligibleEvents.map((event) => ({
     event,
-    weight: calculateEventWeight(event, gameState, ruleContext, history, context.recentWindow),
+    weight: calculateEventWeight(event, gameState, ruleContext, history, context.recentWindow, context.world),
   }));
   const seed = context.seed ?? `${gameState.gameId}:${gameState.week}:${history.length}`;
   return {
@@ -219,5 +241,6 @@ export function createEventHistoryEntry(
     outcomeTags: [],
     status: "selected",
     flagEffects: [],
+    actorIds: [...(event.actorIds ?? ["player", gameState.maleLead])],
   };
 }

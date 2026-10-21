@@ -9,6 +9,7 @@ import { initialStoryFlags } from "../config/history.ts";
 import type { ChatDomainState, ChatTurnInput } from "../types/chat.ts";
 import type { GameState } from "../types/game.ts";
 import type { MemoryRecord } from "../types/memory.ts";
+import { createInitialWorldState } from "../game/worldEngine.ts";
 
 function gameState(affection = 10): GameState {
   return {
@@ -24,6 +25,7 @@ function domain(affection = 10): ChatDomainState {
     gameState: gameState(affection), eventHistory: [], choiceHistory: [], weeklyHistory: [],
     storyFlags: { ...initialStoryFlags }, memories: [], processedSettlementIds: [],
     chatThreads: [], chatMessages: [], chatTurns: [],
+    worldState: createInitialWorldState(), snsPosts: [], snsTriggers: [],
   };
 }
 

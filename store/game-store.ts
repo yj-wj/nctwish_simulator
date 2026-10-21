@@ -19,6 +19,8 @@ import { executeChatTransaction, getChatThreadId } from "@/game/chatEngine";
 import { incomingMessageFixtures } from "@/config/chat";
 import { executeSNSTransaction, SNSEngineError } from "@/game/snsEngine";
 import { appendSNSTrigger, createSNSDebugTrigger, deriveSNSTrigger } from "@/game/snsTriggerEngine";
+import { createInitialWorldState, deriveWorldTriggers, enqueueWorldTriggers, processPendingWorldTriggers } from "@/game/worldEngine";
+import { buildEventWorldContext } from "@/game/worldContextBuilder";
 import { mockStories } from "@/mocks/story";
 import { createLocalStorageAdapter } from "@/storage/localStorageAdapter";
 import { createSaveRepository, SaveRepositoryError, type SaveRepository } from "@/storage/saveRepository";
@@ -26,7 +28,7 @@ import type { CharacterBoundaryId, CharacterId } from "@/types/character";
 import type { EventEngineResult, EventHistoryEntry, EventTag } from "@/types/event";
 import type { GameModeId, GameState, PlayerDraft, StatId } from "@/types/game";
 import type { ChoiceHistoryRecord, OutcomeTag, StoryFlagState, WeeklyStateSnapshot } from "@/types/history";
-import type { MemoryRecord } from "@/types/memory";
+import type { EntityId, MemoryRecord } from "@/types/memory";
 import type { GameSave, GameSaveData, SaveSummary } from "@/types/save";
 import type { StateChangeLogEntry } from "@/types/state";
 import type { ActionReceipt, StoryChoice } from "@/types/ui";
@@ -34,6 +36,7 @@ import type { StoryGenerationOutput } from "@/ai/schemas";
 import type { AIBadcaseRecord, TurnDomainState, TurnPlayerInput, TurnStatus, TurnTrace } from "@/types/turn";
 import type { ChatDomainState, ChatMessage, ChatThread, ChatTurnRecord, ChatTurnStatus, ChatTurnTrace, IncomingMessageTrigger } from "@/types/chat";
 import type { SNSDomainState, SNSGenerationStatus, SNSGenerationTrigger, SNSPost, SNSTurnTrace } from "@/types/sns";
+import type { WorldSignal, WorldState, WorldTriggerType } from "@/types/world";
 
 const initialDraft: PlayerDraft = {
   name: "",
@@ -92,6 +95,10 @@ const initialSNSUI = {
   lastSNSTrace: null as SNSTurnTrace | null,
 };
 
+const initialWorldUI = {
+  worldState: createInitialWorldState(),
+};
+
 let browserSaveRepository: SaveRepository | null = null;
 
 function getSaveRepository(): SaveRepository {
@@ -133,6 +140,7 @@ export interface GameStore {
   snsStatus: SNSGenerationStatus;
   snsError: string | null;
   lastSNSTrace: SNSTurnTrace | null;
+  worldState: WorldState;
   eventHistory: EventHistoryEntry[];
   selectedEventId: string | null;
   eventEngineResult: EventEngineResult | null;
@@ -166,6 +174,7 @@ export interface GameStore {
   processPendingSNS: () => Promise<boolean>;
   enqueueSNSFixture: (fixtureId: string) => void;
   markSNSRead: () => void;
+  applyWorldFixture: (type: WorldTriggerType) => void;
   setFreeAction: (text: string) => void;
   setAffection: (affection: number) => void;
   setDebugStat: (stat: StatId, value: number) => void;
@@ -204,6 +213,7 @@ function getSaveData(state: GameStore): GameSaveData | null {
     incomingMessageTriggers: state.incomingMessageTriggers,
     snsPosts: state.snsPosts,
     snsTriggers: state.snsTriggers,
+    worldState: state.worldState,
     runtime: {
       playerConfirmed: state.playerConfirmed,
       characterConfirmed: state.characterConfirmed,
@@ -253,6 +263,7 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
     lastChatTrace: null,
     snsPosts: save.snsPosts,
     snsTriggers: save.snsTriggers,
+    worldState: save.worldState,
     snsStatus: "idle",
     snsError: null,
     lastSNSTrace: null,
@@ -268,6 +279,18 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
     activeSaveUpdatedAt: save.updatedAt,
     saveError: null,
   };
+}
+
+function settleWorldSignal(
+  snapshot: Pick<GameStore, "worldState" | "incomingMessageTriggers" | "snsTriggers" | "memories">,
+  maleLead: CharacterId,
+  signal: WorldSignal,
+  incoming = snapshot.incomingMessageTriggers,
+  sns = snapshot.snsTriggers,
+  memories = snapshot.memories,
+) {
+  const queued = enqueueWorldTriggers(snapshot.worldState, deriveWorldTriggers(signal));
+  return processPendingWorldTriggers(queued, maleLead, incoming, sns, { gameId: signal.gameId, memories });
 }
 
 export const useGameStore = create<GameStore>()((set, get) => {
@@ -330,6 +353,10 @@ export const useGameStore = create<GameStore>()((set, get) => {
       selectedEventRecordId: snapshot.selectedEventRecordId,
       eventSeed: snapshot.eventSeed,
       recentStoryOpenings: snapshot.recentStoryOpenings,
+      worldState: snapshot.worldState,
+      chatTurns: snapshot.chatTurns,
+      snsPosts: snapshot.snsPosts,
+      snsTriggers: snapshot.snsTriggers,
     };
     const turnId = createTurnId(domain, input);
     set({
@@ -360,13 +387,22 @@ export const useGameStore = create<GameStore>()((set, get) => {
             beforeState: result.trace.beforeState,
             afterState: result.trace.afterState,
           });
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "story", sourceId: result.turnId,
+            eventId: sourceEvent?.id, eventCategory: sourceEvent?.category,
+            eventTags: (sourceEvent?.tags ?? []) as EventTag[],
+            outcomeTags: result.trace.settlementProposal.acceptedOutcomeTags,
+            choiceTags: result.trace.settlementProposal.acceptedChoiceTags,
+            actorIds: (sourceEvent?.actorIds ?? ["player", result.gameState.maleLead]) as EntityId[],
+            publicSummary: sourceEvent?.description ?? undefined,
+          }, snapshot.incomingMessageTriggers, appendSNSTrigger(snapshot.snsTriggers, snsTrigger), result.memories);
           const patch: Partial<GameStore> = {
             gameState: result.gameState,
             eventHistory: result.eventHistory,
             choiceHistory: result.choiceHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
             eventEngineResult: result.eventEngineResult,
@@ -381,7 +417,9 @@ export const useGameStore = create<GameStore>()((set, get) => {
               response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
             },
             freeAction: "",
-            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
+            worldState: world.worldState,
+            incomingMessageTriggers: world.incomingMessageTriggers,
+            snsTriggers: world.snsTriggers,
           };
           const data = getSaveData({ ...snapshot, ...patch } as GameStore);
           if (!data) throw new SaveRepositoryError("invalid_schema", "Turn produced no saveable game state.");
@@ -404,6 +442,15 @@ export const useGameStore = create<GameStore>()((set, get) => {
             beforeState: result.trace.beforeState,
             afterState: result.trace.afterState,
           });
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "story", sourceId: result.turnId,
+            eventId: sourceEvent?.id, eventCategory: sourceEvent?.category,
+            eventTags: (sourceEvent?.tags ?? []) as EventTag[],
+            outcomeTags: result.trace.settlementProposal.acceptedOutcomeTags,
+            choiceTags: result.trace.settlementProposal.acceptedChoiceTags,
+            actorIds: (sourceEvent?.actorIds ?? ["player", result.gameState.maleLead]) as EntityId[],
+            publicSummary: sourceEvent?.description ?? undefined,
+          }, snapshot.incomingMessageTriggers, appendSNSTrigger(snapshot.snsTriggers, snsTrigger), result.memories);
           const rejectedSuggestions = [
             ...result.trace.settlementProposal.rejectedEffects.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
             ...result.trace.settlementProposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
@@ -426,7 +473,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
             choiceHistory: result.choiceHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
             eventEngineResult: result.eventEngineResult,
@@ -441,7 +488,9 @@ export const useGameStore = create<GameStore>()((set, get) => {
               response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
             },
             freeAction: "",
-            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
+            worldState: world.worldState,
+            incomingMessageTriggers: world.incomingMessageTriggers,
+            snsTriggers: world.snsTriggers,
             lastTurnTrace: result.trace,
             aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
               ? [...snapshot.aiBadcases, rejectionBadcase]
@@ -508,6 +557,9 @@ export const useGameStore = create<GameStore>()((set, get) => {
       chatThreads: snapshot.chatThreads,
       chatMessages: snapshot.chatMessages,
       chatTurns: snapshot.chatTurns,
+      worldState: snapshot.worldState,
+      snsPosts: snapshot.snsPosts,
+      snsTriggers: snapshot.snsTriggers,
     };
     set({ chatStatus: "generating", chatError: null });
     try {
@@ -528,21 +580,31 @@ export const useGameStore = create<GameStore>()((set, get) => {
                 outcomeTags: result.trace.proposal.acceptedOutcomeTags as OutcomeTag[],
                 beforeState: result.trace.beforeState, afterState: result.trace.afterState,
               }) : null;
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "chat", sourceId: result.turnId,
+            eventId: `chat:${result.trace.context.context.threadId}`, eventCategory: "relationship",
+            eventTags: snsTrigger ? ["sns", "privacy", "high-risk"] : ["relationship-progress"],
+            outcomeTags: result.trace.proposal.acceptedOutcomeTags,
+            choiceTags: result.trace.proposal.acceptedChoiceTags,
+            actorIds: ["player", result.gameState.maleLead],
+            publicSummary: snsTrigger?.publicSummary,
+          }, incomingMessageTriggers, appendSNSTrigger(snapshot.snsTriggers, snsTrigger), result.memories);
           const patch: Partial<GameStore> = {
             gameState: result.gameState,
             eventHistory: result.eventHistory,
             choiceHistory: result.choiceHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             chatThreads: result.chatThreads,
             chatMessages: result.chatMessages,
             chatTurns: result.chatTurns,
-            incomingMessageTriggers,
+            incomingMessageTriggers: world.incomingMessageTriggers,
             stateChangeLog: result.stateChangeLog ? [...snapshot.stateChangeLog, result.stateChangeLog] : snapshot.stateChangeLog,
             chatInput: input.kind === "player_message" ? "" : snapshot.chatInput,
-            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
+            snsTriggers: world.snsTriggers,
+            worldState: world.worldState,
           };
           const data = getSaveData({ ...snapshot, ...patch } as GameStore);
           if (!data) throw new SaveRepositoryError("invalid_schema", "Chat turn produced no saveable state.");
@@ -562,6 +624,14 @@ export const useGameStore = create<GameStore>()((set, get) => {
                 outcomeTags: result.trace.proposal.acceptedOutcomeTags as OutcomeTag[],
                 beforeState: result.trace.beforeState, afterState: result.trace.afterState,
               }) : null;
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "chat", sourceId: result.turnId,
+            eventId: `chat:${result.trace.context.context.threadId}`, eventCategory: "relationship",
+            eventTags: snsTrigger ? ["sns", "privacy", "high-risk"] : ["relationship-progress"],
+            outcomeTags: result.trace.proposal.acceptedOutcomeTags,
+            choiceTags: result.trace.proposal.acceptedChoiceTags,
+            actorIds: ["player", result.gameState.maleLead], publicSummary: snsTrigger?.publicSummary,
+          }, incomingMessageTriggers, appendSNSTrigger(snapshot.snsTriggers, snsTrigger), result.memories);
           const rejectedSuggestions = [
             ...result.trace.proposal.effects.rejected.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
             ...result.trace.proposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
@@ -583,18 +653,19 @@ export const useGameStore = create<GameStore>()((set, get) => {
             choiceHistory: result.choiceHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             chatThreads: result.chatThreads,
             chatMessages: result.chatMessages,
             chatTurns: result.chatTurns,
-            incomingMessageTriggers,
+            incomingMessageTriggers: world.incomingMessageTriggers,
             stateChangeLog: result.stateChangeLog ? [...snapshot.stateChangeLog, result.stateChangeLog] : snapshot.stateChangeLog,
             chatInput: input.kind === "player_message" ? "" : snapshot.chatInput,
             chatStatus: "completed",
             chatError: null,
             lastChatTrace: result.trace,
-            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
+            snsTriggers: world.snsTriggers,
+            worldState: world.worldState,
             aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
               ? [...snapshot.aiBadcases, rejectionBadcase]
               : snapshot.aiBadcases,
@@ -638,6 +709,8 @@ export const useGameStore = create<GameStore>()((set, get) => {
       processedSettlementIds: snapshot.processedSettlementIds,
       snsPosts: snapshot.snsPosts,
       snsTriggers: snapshot.snsTriggers,
+      worldState: snapshot.worldState,
+      chatTurns: snapshot.chatTurns,
     };
     set({ snsStatus: "generating", snsError: null });
     try {
@@ -646,15 +719,24 @@ export const useGameStore = create<GameStore>()((set, get) => {
         onStatus: (snsStatus) => set({ snsStatus }),
       }, {
         persist: (result) => {
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "sns", sourceId: trigger.id,
+            eventId: trigger.sourceEventId, eventCategory: "publicOpinion", eventTags: trigger.sourceTags,
+            storyFlags: trigger.level === "crisis" ? { publicOpinionOutOfControl: true } : {},
+            actorIds: ["player", result.gameState.maleLead, "npc:fandom-key-person"],
+            publicSummary: trigger.publicSummary,
+          }, snapshot.incomingMessageTriggers, result.snsTriggers, result.memories);
           const patch: Partial<GameStore> = {
             gameState: result.gameState,
             eventHistory: result.eventHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             snsPosts: result.snsPosts,
-            snsTriggers: result.snsTriggers,
+            snsTriggers: world.snsTriggers,
+            incomingMessageTriggers: world.incomingMessageTriggers,
+            worldState: world.worldState,
             stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
           };
           const data = getSaveData({ ...snapshot, ...patch } as GameStore);
@@ -663,15 +745,23 @@ export const useGameStore = create<GameStore>()((set, get) => {
         },
         commit: (result, persisted) => {
           const saved = persisted as GameSave;
+          const world = settleWorldSignal(snapshot, result.gameState.maleLead, {
+            gameId: result.gameState.gameId, week: result.gameState.week, source: "sns", sourceId: trigger.id,
+            eventId: trigger.sourceEventId, eventCategory: "publicOpinion", eventTags: trigger.sourceTags,
+            storyFlags: trigger.level === "crisis" ? { publicOpinionOutOfControl: true } : {},
+            actorIds: ["player", result.gameState.maleLead, "npc:fandom-key-person"], publicSummary: trigger.publicSummary,
+          }, snapshot.incomingMessageTriggers, result.snsTriggers, result.memories);
           set({
             gameState: result.gameState,
             eventHistory: result.eventHistory,
             weeklyHistory: result.weeklyHistory,
             storyFlags: result.storyFlags,
-            memories: result.memories,
+            memories: world.memories,
             processedSettlementIds: result.processedSettlementIds,
             snsPosts: result.snsPosts,
-            snsTriggers: result.snsTriggers,
+            snsTriggers: world.snsTriggers,
+            incomingMessageTriggers: world.incomingMessageTriggers,
+            worldState: world.worldState,
             stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
             snsStatus: "completed",
             snsError: null,
@@ -712,6 +802,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
       ...initialEventUI,
       ...initialChatUI,
       ...initialSNSUI,
+      ...initialWorldUI,
       patchDraft: (patch) =>
         set((state) => ({
           draft: { ...state.draft, ...patch },
@@ -723,6 +814,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialEventUI,
           ...initialChatUI,
           ...initialSNSUI,
+          worldState: createInitialWorldState(),
         })),
       confirmPlayer: (draft) => saveAfter(() => {
         set({
@@ -735,6 +827,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialEventUI,
           ...initialChatUI,
           ...initialSNSUI,
+          worldState: createInitialWorldState(),
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -751,6 +844,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialEventUI,
           ...initialChatUI,
           ...initialSNSUI,
+          worldState: createInitialWorldState(),
         })),
       confirmCharacter: () => {
         const { draft, gameState } = get();
@@ -808,6 +902,11 @@ export const useGameStore = create<GameStore>()((set, get) => {
           const eventEngineResult = runEventEngine(transition.gameState, {
             history: history.eventHistory,
             seed: state.eventSeed,
+            world: buildEventWorldContext({
+              gameState: transition.gameState, worldState: state.worldState, storyFlags: history.storyFlags,
+              eventHistory: history.eventHistory, memories: history.memories,
+              chatTurns: state.chatTurns, snsPosts: state.snsPosts, snsTriggers: state.snsTriggers,
+            }),
           });
           const selectedEvent = eventEngineResult.selectedEvent?.event;
           const nextEventRecord = selectedEvent
@@ -897,6 +996,27 @@ export const useGameStore = create<GameStore>()((set, get) => {
         const trigger = createSNSDebugTrigger(fixtureId, state.gameState);
         if (!trigger) return;
         saveAfter(() => set({ snsTriggers: appendSNSTrigger(state.snsTriggers, trigger) }));
+      },
+      applyWorldFixture: (type) => {
+        if (process.env.NODE_ENV !== "development") return;
+        const state = get();
+        if (!state.gameState) return;
+        const outcomeTags: string[] = type === "relationship_confirmed" ? ["relationship_confirmed"]
+          : type === "exposure_started" ? ["major_exposure"]
+          : type === "career_breakdown" ? ["career_breakdown"]
+          : type === "financial_crisis" ? ["financial_crisis"]
+          : type === "major_argument" ? ["unstable_response"] : [];
+        const choiceTags = type === "temporary_distance" ? ["temporary_distance"] : [];
+        const storyFlags = type === "public_opinion_crisis" ? { publicOpinionOutOfControl: true } : {};
+        const eventCategory = type === "company_intervention" ? "company" as const : "daily" as const;
+        const world = settleWorldSignal(state, state.gameState.maleLead, {
+          gameId: state.gameState.gameId, week: state.gameState.week, source: type === "major_argument" ? "chat" : "fixture",
+          sourceId: `fixture:${type}:${state.gameState.week}`, eventId: `fixture:${type}`, eventCategory,
+          eventTags: type === "company_intervention" ? ["company-intervention"] : [],
+          outcomeTags, choiceTags, storyFlags, actorIds: ["player", state.gameState.maleLead],
+          publicSummary: `Development fixture: ${type}`,
+        });
+        saveAfter(() => set({ worldState: world.worldState, incomingMessageTriggers: world.incomingMessageTriggers, snsTriggers: world.snsTriggers }));
       },
       markSNSRead: () => {
         const state = get();
@@ -1050,6 +1170,11 @@ export const useGameStore = create<GameStore>()((set, get) => {
           const eventEngineResult = runEventEngine(state.gameState, {
             history: state.eventHistory,
             seed: state.eventSeed,
+            world: buildEventWorldContext({
+              gameState: state.gameState, worldState: state.worldState, storyFlags: state.storyFlags,
+              eventHistory: state.eventHistory, memories: state.memories,
+              chatTurns: state.chatTurns, snsPosts: state.snsPosts, snsTriggers: state.snsTriggers,
+            }),
           });
           const selectedEvent = eventEngineResult.selectedEvent?.event;
           const selectedRecord = selectedEvent
@@ -1112,6 +1237,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               ...initialEventUI,
               ...initialChatUI,
               ...initialSNSUI,
+              worldState: createInitialWorldState(),
               activeSaveId: null,
               activeSaveCreatedAt: null,
               activeSaveUpdatedAt: null,
@@ -1141,6 +1267,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialEventUI,
           ...initialChatUI,
           ...initialSNSUI,
+          worldState: createInitialWorldState(),
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -1171,6 +1298,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
             incomingMessageTriggers: [],
             snsPosts: [],
             snsTriggers: [],
+            worldState: createInitialWorldState(),
             runtime: {
               playerConfirmed: true,
               characterConfirmed: false,

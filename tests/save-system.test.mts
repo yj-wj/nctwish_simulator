@@ -11,6 +11,7 @@ import { createSaveRepository, SAVE_STORAGE_KEYS, SaveRepositoryError } from "..
 import type { GameState } from "../types/game.ts";
 import type { HistorySettlementInput } from "../types/history.ts";
 import type { GameSaveData } from "../types/save.ts";
+import { createInitialWorldState, deriveWorldTriggers, enqueueWorldTriggers } from "../game/worldEngine.ts";
 
 function makeState(name: string, maleLead: GameState["maleLead"] = "sion"): GameState {
   return {
@@ -107,6 +108,7 @@ function makeSaveData(name = "存档 A", maleLead: GameState["maleLead"] = "sion
     incomingMessageTriggers: [],
     snsPosts: [],
     snsTriggers: [],
+    worldState: createInitialWorldState(),
     runtime: {
       playerConfirmed: true,
       characterConfirmed: true,
@@ -132,7 +134,7 @@ test("Save / Load round trip preserves every authoritative Phase 4 field", () =>
   const data = makeSaveData();
   const created = repository.createSave(data, "save-a");
   const loaded = repository.loadGame("save-a");
-  assert.equal(loaded.schemaVersion, 3);
+  assert.equal(loaded.schemaVersion, 4);
   assert.deepEqual(loaded.playerSetup, data.playerSetup);
   assert.deepEqual(loaded.gameState, data.gameState);
   assert.deepEqual(loaded.eventHistory, data.eventHistory);
@@ -166,7 +168,7 @@ test("Phase 5C generated story runtime survives Save / Load for refresh continua
   assert.deepEqual(loaded.runtime.currentStory, data.runtime.currentStory);
 });
 
-test("schema v3 persists Chat/SNS and migrates v1/v2 saves", () => {
+test("schema v4 persists World state and migrates v1/v2/v3 saves", () => {
   const { storage, repository } = repositoryHarness();
   const data = makeSaveData("Chat 存档");
   data.chatThreads = [{ id: "player:sion", playerId: "player", participantId: "sion", unreadCount: 1, lastReadSequence: 0, createdAt: "2026-10-22T10:00:00.000Z", updatedAt: "2026-10-22T10:00:00.000Z" }];
@@ -175,7 +177,7 @@ test("schema v3 persists Chat/SNS and migrates v1/v2 saves", () => {
   data.snsPosts = [{ id: "sns:test:post:1", authorId: "fan-update", authorName: "花园资讯", handle: "@garden", accountType: "fan", content: "今天的机场公开行程受到关注。", week: 12, sequence: 1, tags: ["airport", "fandom"], visibility: "public", sentiment: "positive", reactions: { likes: 120, reposts: 20, comments: 8, heat: 150 }, sourceTriggerId: "sns:test", read: false, createdAt: "2026-10-22T10:00:00.000Z" }];
   repository.createSave(data, "chat-v2");
   const chatLoaded = repository.loadGame("chat-v2");
-  assert.equal(chatLoaded.schemaVersion, 3);
+  assert.equal(chatLoaded.schemaVersion, 4);
   assert.equal(chatLoaded.chatMessages[0].content, "到家了吗？");
   assert.equal(chatLoaded.snsPosts[0].content, "今天的机场公开行程受到关注。");
   assert.equal(chatLoaded.snsPosts[0].read, false);
@@ -185,20 +187,42 @@ test("schema v3 persists Chat/SNS and migrates v1/v2 saves", () => {
   delete legacy.chatThreads; delete legacy.chatMessages; delete legacy.chatTurns; delete legacy.incomingMessageTriggers;
   storage.setItem(SAVE_STORAGE_KEYS.save("legacy-v1"), JSON.stringify(legacy));
   const migrated = repository.loadGame("legacy-v1");
-  assert.equal(migrated.schemaVersion, 3);
+  assert.equal(migrated.schemaVersion, 4);
   assert.deepEqual(migrated.chatThreads, []);
   assert.deepEqual(migrated.chatMessages, []);
   assert.deepEqual(migrated.snsPosts, []);
-  assert.equal(JSON.parse(storage.getItem(SAVE_STORAGE_KEYS.save("legacy-v1"))!).schemaVersion, 3);
+  assert.equal(JSON.parse(storage.getItem(SAVE_STORAGE_KEYS.save("legacy-v1"))!).schemaVersion, 4);
 
   const legacyV2 = structuredClone(repository.createSave(makeSaveData("v2 存档"), "legacy-v2")) as unknown as Record<string, unknown>;
   legacyV2.schemaVersion = 2;
   delete legacyV2.snsPosts; delete legacyV2.snsTriggers;
   storage.setItem(SAVE_STORAGE_KEYS.save("legacy-v2"), JSON.stringify(legacyV2));
   const migratedV2 = repository.loadGame("legacy-v2");
-  assert.equal(migratedV2.schemaVersion, 3);
+  assert.equal(migratedV2.schemaVersion, 4);
   assert.deepEqual(migratedV2.snsPosts, []);
   assert.deepEqual(migratedV2.snsTriggers, []);
+
+  const legacyV3 = structuredClone(repository.createSave(makeSaveData("v3 存档"), "legacy-v3")) as unknown as Record<string, unknown>;
+  legacyV3.schemaVersion = 3;
+  delete legacyV3.worldState;
+  storage.setItem(SAVE_STORAGE_KEYS.save("legacy-v3"), JSON.stringify(legacyV3));
+  const migratedV3 = repository.loadGame("legacy-v3");
+  assert.equal(migratedV3.schemaVersion, 4);
+  assert.equal(migratedV3.worldState.npcStates.length, 8);
+});
+
+test("pending World Trigger survives Save / Load without being processed by persistence", () => {
+  const { repository } = repositoryHarness();
+  const data = makeSaveData("世界队列");
+  data.worldState = enqueueWorldTriggers(data.worldState, deriveWorldTriggers({
+    gameId: data.gameState.gameId, week: data.gameState.week, source: "story", sourceId: "turn-pending",
+    eventId: "exposure", eventCategory: "crisis", eventTags: ["privacy", "high-risk"],
+    outcomeTags: ["major_exposure"], actorIds: ["player", data.gameState.maleLead],
+  }));
+  repository.createSave(data, "world-pending");
+  const loaded = repository.loadGame("world-pending");
+  assert.equal(loaded.worldState.triggers[0].status, "pending");
+  assert.equal(loaded.worldState.processedTriggerIds.length, 0);
 });
 
 test("derived Ending Candidate is rebuilt from loaded facts instead of persisted", () => {

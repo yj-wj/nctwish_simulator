@@ -130,6 +130,7 @@ const eventHistoryEntrySchema = z.object({
   status: eventStatusSchema,
   settlementId: z.string().min(1).optional(),
   flagEffects: z.array(storyFlagEffectSchema),
+  actorIds: z.array(entityIdSchema).optional(),
 });
 const storyFlagsSchema = z.object({
   relationshipConfirmed: z.boolean(),
@@ -233,6 +234,27 @@ const snsTriggerSchema = z.object({
   sourceTags: z.array(eventTagSchema), publicTitle: z.string().min(1), publicSummary: z.string().min(1),
   status: z.enum(["pending", "processing", "delivered"]),
 });
+const npcIdSchema = z.enum(["npc:friend", "npc:fandom-friend", "npc:childhood-friend", "npc:mother", "npc:father", "npc:manager", "npc:industry-rival", "npc:fandom-key-person"]);
+const worldTriggerTypeSchema = z.enum(["relationship_confirmed", "exposure_started", "public_opinion_crisis", "company_intervention", "career_breakdown", "temporary_distance", "major_argument", "financial_crisis"]);
+const worldTriggerSchema = z.object({
+  id: z.string().min(1), type: worldTriggerTypeSchema, week: z.number().int().min(1),
+  source: z.enum(["story", "chat", "sns", "fixture"]), sourceId: z.string().min(1), eventId: z.string().optional(),
+  actorIds: z.array(entityIdSchema), publicSummary: z.string().optional(), tags: z.array(z.string()), status: z.enum(["pending", "processed"]),
+});
+const worldStateSchema = z.object({
+  npcStates: z.array(z.object({
+    npcId: npcIdSchema, known: z.boolean(), active: z.boolean(),
+    relationship: z.object({ trust: z.number().min(0).max(100), closeness: z.number().min(0).max(100), tension: z.number().min(0).max(100) }),
+    knownBy: z.array(entityIdSchema),
+  })),
+  triggers: z.array(worldTriggerSchema),
+  processedTriggerIds: z.array(z.string().min(1)),
+  recentEffects: z.array(z.object({
+    id: z.string().min(1), triggerId: z.string().min(1), triggerType: worldTriggerTypeSchema,
+    week: z.number().int().min(1), target: z.enum(["story", "chat", "sns", "memory"]),
+    actorIds: z.array(entityIdSchema), summary: z.string().min(1),
+  })),
+});
 
 export const gameSaveDataSchema = z.object({
   playerSetup: playerDraftSchema,
@@ -249,6 +271,7 @@ export const gameSaveDataSchema = z.object({
   incomingMessageTriggers: z.array(incomingMessageTriggerSchema),
   snsPosts: z.array(snsPostSchema),
   snsTriggers: z.array(snsTriggerSchema),
+  worldState: worldStateSchema,
   runtime: z.object({
     playerConfirmed: z.boolean(),
     characterConfirmed: z.boolean(),

@@ -18,7 +18,7 @@ export function GameShell({ children }: { children: ReactNode }) {
   const relationshipStage = getRelationshipStage(gameState.stats.affection);
   return <RouteGuard stage="game"><SiteHeader /><main id="main-content" className="game-shell">
     <div className="game-context"><div className="week-label"><CalendarDays size={17} /><strong>第 {gameState.week} 周</strong><span>CHAPTER 01</span></div><div className="context-details"><span><MapPin size={15} />{gameState.currentScene}</span><span>{character.name}（{character.displayName}）</span><span className="relationship-pill"><Heart size={13} />{relationshipStage.name}</span></div></div>
-    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 6B · 主剧情、Chat 与 SNS 共享 GameState、规则、记忆与存档。</span></div>
+    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 6C · 主剧情、Chat、SNS、NPC 与世界触发共享确定性状态。</span></div>
     <RelationshipDebug />
     {children}
   </main><BottomNav /></RouteGuard>;

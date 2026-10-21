@@ -9,6 +9,7 @@ import { deriveSNSTrigger } from "../game/snsTriggerEngine.ts";
 import type { GameState } from "../types/game.ts";
 import type { MemoryRecord } from "../types/memory.ts";
 import type { SNSDomainState, SNSGenerationTrigger } from "../types/sns.ts";
+import { createInitialWorldState } from "../game/worldEngine.ts";
 
 function gameState(): GameState {
   return {
@@ -23,6 +24,7 @@ function domain(): SNSDomainState {
   return {
     gameState: gameState(), eventHistory: [], choiceHistory: [], weeklyHistory: [],
     storyFlags: { ...initialStoryFlags }, memories: [], processedSettlementIds: [], snsPosts: [], snsTriggers: [],
+    worldState: createInitialWorldState(), chatTurns: [],
   };
 }
 

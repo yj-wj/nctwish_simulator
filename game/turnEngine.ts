@@ -37,6 +37,8 @@ import { getRelationshipStage } from "./relationship.ts";
 import { evaluateAction } from "./ruleEngine.ts";
 import { processStructuredSettlement } from "./settlementPipeline.ts";
 import { settleChoice } from "./stateEngine.ts";
+import { buildEventWorldContext } from "./worldContextBuilder.ts";
+import { deriveWorldTriggers, enqueueWorldTriggers } from "./worldEngine.ts";
 
 const allowedStatSet = new Set<string>(allowedTurnStats);
 const allowedMagnitudeSet = new Set<string>(allowedEffectMagnitudes);
@@ -242,6 +244,8 @@ function sanitizeMemoryCandidates(
   const allowedActors = new Set<EntityId | string>([
     "player",
     input.context.maleLead.id,
+    ...input.context.world.relevantNPCs.map(({ id }) => id),
+    ...(input.context.world.currentEvent?.actorIds ?? []),
     ...input.context.relevantMemories.flatMap(({ actors }) => actors),
   ]);
   const seen = new Set(existing.map(({ content }) => content.trim().toLocaleLowerCase()));
@@ -321,6 +325,10 @@ export async function processTurn(
       viewerId: "player",
       isNewGameFirstTurn: false,
       recentStoryOpenings: state.recentStoryOpenings,
+      worldState: state.worldState,
+      chatTurns: state.chatTurns,
+      snsPosts: state.snsPosts,
+      snsTriggers: state.snsTriggers,
       playerAction: { type: "free_action", text: playerInput },
     });
     const actionInput = buildActionInterpretationInput(initialContext, playerInput);
@@ -345,6 +353,10 @@ export async function processTurn(
     ruleEvaluation,
     isNewGameFirstTurn: false,
     recentStoryOpenings: state.recentStoryOpenings,
+    worldState: state.worldState,
+    chatTurns: state.chatTurns,
+    snsPosts: state.snsPosts,
+    snsTriggers: state.snsTriggers,
     playerAction: { type: input.kind === "free_action" ? "free_action" : "choice", text: playerInput },
   });
   services.onStatus?.("generating");
@@ -430,9 +442,26 @@ export async function processTurn(
       memoryEffects: memory.memoryEffects,
     },
   });
+  const eventWorldState = enqueueWorldTriggers(state.worldState, deriveWorldTriggers({
+    gameId: transition.gameState.gameId, week: transition.gameState.week, source: "story", sourceId: turnId,
+    eventId: currentEvent?.id, eventCategory, eventTags,
+    outcomeTags: outcomeTags.accepted, choiceTags: choiceTags.accepted,
+    actorIds: currentEvent?.actorIds ?? ["player", transition.gameState.maleLead],
+    publicSummary: currentEvent?.description,
+  }));
   const eventEngineResult = runEventEngine(transition.gameState, {
     history: structured.eventHistory,
     seed: state.eventSeed,
+    world: buildEventWorldContext({
+      gameState: transition.gameState,
+      worldState: eventWorldState,
+      storyFlags: structured.storyFlags,
+      eventHistory: structured.eventHistory,
+      memories: structured.memories,
+      chatTurns: state.chatTurns,
+      snsPosts: state.snsPosts,
+      snsTriggers: state.snsTriggers,
+    }),
   });
   const selectedEvent = eventEngineResult.selectedEvent?.event ?? null;
   const selectedRecord = selectedEvent

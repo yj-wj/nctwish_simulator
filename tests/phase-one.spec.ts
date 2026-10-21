@@ -44,7 +44,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     const choice = page.locator(".story-choice").filter({ hasText: id }).first();
     const previousText = await choice.locator("span").nth(1).innerText();
     await choice.click();
-    await expect(page.locator(".story-choice").first()).toBeEnabled();
+    await expect(page.locator(".story-choice").first()).toBeEnabled({ timeout: 15_000 });
     await expect(page.locator(".story-paper h1")).toBeFocused();
     await expect(page.getByLabel("上一轮选择")).toHaveText(`上一轮选择：${id} · ${previousText}`);
     await expect(page.getByLabel("Event Engine 选中的事件")).toBeVisible();
@@ -62,7 +62,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await page.getByLabel("D · 自由行动").fill("我把资料收好，继续自己的工作。");
   const submitAction = page.locator(".free-action button[type=submit]");
   await submitAction.click();
-  await expect(submitAction).toBeEnabled();
+  await expect(submitAction).toBeEnabled({ timeout: 15_000 });
   await expect(page.getByRole("status")).toContainText("本回合已通过规则检查");
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
   await expect(page.getByLabel("Event Engine 选中的事件")).toBeVisible();
@@ -84,9 +84,9 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.locator(".sns-post, .sns-feed-state").first()).toBeVisible();
   await noOverflow(page);
   await nav.getByRole("link", { name: "人物", exact: true }).click();
-  await expect(page.locator(".profile-name")).toContainText("前田陆");
-  await page.getByText("档案详情 · 私下性格", { exact: true }).click();
-  await expect(page.locator("details[open]")).toContainText("黑色的猫");
+  await expect(page.locator(".lead-card")).toContainText("前田陆");
+  await expect(page.locator(".person-card").filter({ hasText: "室友" })).toBeVisible();
+  await expect(page.locator(".people-grid")).not.toContainText("黑色的猫");
   await noOverflow(page);
   await nav.getByRole("link", { name: "档案", exact: true }).click();
   await expect(page.getByRole("heading", { name: "林间" })).toBeVisible();

@@ -6,6 +6,8 @@ import type { ChatDomainState, ChatTurnInput } from "../types/chat.ts";
 import type { RuleEvaluation } from "../types/rules.ts";
 import { getRelationshipStage } from "./relationship.ts";
 import { getRelevantMemories, getVisibleMemories } from "./memoryEngine.ts";
+import { buildWorldContext } from "./worldContextBuilder.ts";
+import { createInitialWorldState } from "./worldEngine.ts";
 
 export function buildChatContext(
   state: ChatDomainState,
@@ -30,6 +32,17 @@ export function buildChatContext(
     limit: CHAT_POLICY.relevantMemoryLimit,
   });
   const storyFacts = Object.entries(state.storyFlags).filter(([, value]) => value).map(([key]) => key);
+  const world = buildWorldContext({
+    gameState,
+    worldState: state.worldState ?? createInitialWorldState(),
+    storyFlags: state.storyFlags,
+    eventHistory: state.eventHistory,
+    memories: state.memories,
+    viewerId: gameState.maleLead,
+    chatTurns: state.chatTurns,
+    snsPosts: state.snsPosts ?? [],
+    snsTriggers: state.snsTriggers ?? [],
+  });
 
   return chatGenerationInputSchema.parse({
     promptVersion: CHAT_PROMPT_VERSION,
@@ -63,6 +76,7 @@ export function buildChatContext(
         careerPressure: gameState.stats.careerPressure,
       },
       storyFacts,
+      world,
       recentMessages,
       relevantMemories: relevantMemories.map(({ memory }) => ({
         id: memory.id,

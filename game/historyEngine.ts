@@ -88,6 +88,7 @@ export function settleEventHistory(
     status: input.outcome.eventStatus,
     settlementId: input.settlementId,
     flagEffects: [...(existing?.flagEffects ?? []), ...input.outcome.flagEffects],
+    ...(existing?.actorIds ? { actorIds: [...existing.actorIds] } : {}),
   };
   if (existingIndex < 0) return [...history, settled];
   return history.map((entry, index) => index === existingIndex ? settled : entry);

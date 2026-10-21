@@ -161,6 +161,7 @@ test("selection is seeded, extended history entries are structured, and the engi
     outcomeTags: [],
     status: "selected",
     flagEffects: [],
+    actorIds: first.selectedEvent.event.actorIds ?? ["player", state.maleLead],
   });
   assert.deepEqual(getMatchedTriggers(state), first.matchedTriggers);
 });

@@ -9,9 +9,14 @@ import type { GameState } from "../types/game.ts";
 import type { StoryFlagState } from "../types/history.ts";
 import type { EntityId, MemoryRecord } from "../types/memory.ts";
 import type { RuleEvaluation, StructuredPlayerAction } from "../types/rules.ts";
+import type { ChatTurnRecord } from "../types/chat.ts";
+import type { SNSGenerationTrigger, SNSPost } from "../types/sns.ts";
+import type { WorldState } from "../types/world.ts";
 import { getRelationshipStage } from "./relationship.ts";
 import { getRelevantMemories, getVisibleMemories } from "./memoryEngine.ts";
 import { evaluateAction } from "./ruleEngine.ts";
+import { createInitialWorldState } from "./worldEngine.ts";
+import { buildWorldContext } from "./worldContextBuilder.ts";
 
 export interface BuildStoryContextOptions {
   gameState: GameState;
@@ -24,6 +29,10 @@ export interface BuildStoryContextOptions {
   playerAction?: StoryGenerationInput["playerAction"];
   isNewGameFirstTurn?: boolean;
   recentStoryOpenings?: string[];
+  worldState?: WorldState;
+  chatTurns?: ChatTurnRecord[];
+  snsPosts?: SNSPost[];
+  snsTriggers?: SNSGenerationTrigger[];
 }
 
 export function extractStoryOpening(story: string, maxLength = 160): string {
@@ -63,7 +72,12 @@ export function buildActionInterpretationInput(
       narrativeConstraints: context.ruleEvaluation.narrativeConstraints,
       allowedInteractions: context.ruleEvaluation.allowedInteractions,
       prohibitedInteractions: context.ruleEvaluation.prohibitedInteractions,
-      knownActorIds: ["player", context.maleLead.id, ...context.relevantMemories.flatMap(({ actors }) => actors)],
+      knownActorIds: [...new Set([
+        "player", context.maleLead.id,
+        ...context.world.relevantNPCs.map(({ id }) => id),
+        ...(context.world.currentEvent?.actorIds ?? []),
+        ...context.relevantMemories.flatMap(({ actors }) => actors),
+      ])],
     },
   });
 }
@@ -109,6 +123,18 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
     .map((opening) => extractStoryOpening(opening))
     .filter(Boolean)
     .slice(-AI_CONTEXT_BUDGET.recentStoryOpenings);
+  const world = buildWorldContext({
+    gameState,
+    worldState: options.worldState ?? createInitialWorldState(),
+    storyFlags,
+    eventHistory,
+    memories,
+    viewerId,
+    currentEvent,
+    chatTurns: options.chatTurns,
+    snsPosts: options.snsPosts,
+    snsTriggers: options.snsTriggers,
+  });
 
   return storyGenerationInputSchema.parse({
     promptVersion: STORY_PROMPT_VERSION,
@@ -149,6 +175,7 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
         title: currentEvent.title,
         description: currentEvent.description ?? null,
         tags: [...currentEvent.tags],
+        actorIds: [...(currentEvent.actorIds ?? ["player", gameState.maleLead])],
       } : null,
       ruleEvaluation: {
         allowedInteractionLevel: rule.relationshipRule.allowedInteractionLevel,
@@ -161,6 +188,7 @@ export function buildStoryGenerationInput(options: BuildStoryContextOptions): St
         prohibitedInteractions: [...relationshipStage.prohibitedInteractions],
       },
       storyFacts: trueStoryFacts,
+      world,
       continuity: {
         turnPhase: isNewGameFirstTurn ? "new_game_first_turn" : "subsequent_turn",
         recentOpenings,

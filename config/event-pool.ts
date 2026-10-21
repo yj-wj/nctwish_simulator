@@ -76,7 +76,7 @@ export const directedEventTemplates: EventTemplate[] = [
   event("tour_stage_secret_code", "publicOpinion", "男主在台上说出疑似暗号的话", ["tour", "concert", "fandom", "high-risk"], { relationshipStages: ambiguousOnward, careerStages: ["巡演期"], baseWeight: 6 }),
 
   // 粉圈舆论事件：8 个条目。
-  event("fandom_korean_forum_hot_post", "publicOpinion", "韩网论坛热帖", ["fandom", "sns", "media"]),
+  event("fandom_korean_forum_hot_post", "publicOpinion", "韩网论坛热帖", ["fandom", "sns", "media"], { actorIds: ["npc:fandom-key-person"] }),
   event("fandom_x_instagram_repost", "publicOpinion", "X / Instagram 搬运", ["fandom", "sns", "media"]),
   event("fandom_overseas_translation", "publicOpinion", "海外粉丝翻译", ["fandom", "sns"]),
   event("fandom_fansite_preview", "publicOpinion", "站姐预览图", ["fandom", "media", "privacy"]),
@@ -91,7 +91,7 @@ export const directedEventTemplates: EventTemplate[] = [
   event("airport_flashlights", "daily", "闪光灯", ["airport", "media"]),
   event("airport_player_in_frame_edge", "publicOpinion", "你被拍进边角", ["airport", "privacy", "media"], { relationshipStages: noticedOnward }),
   event("airport_lead_protects_player", "relationship", "男主下意识护你", ["airport", "relationship-progress", "high-risk"], { relationshipStages: ambiguousOnward, baseWeight: 7 }),
-  event("airport_manager_notices", "company", "经纪人发现异常", ["airport", "company-intervention", "high-risk"], { relationshipStages: interestedOnward, baseWeight: 7 }),
+  event("airport_manager_notices", "company", "经纪人发现异常", ["airport", "company-intervention", "high-risk"], { relationshipStages: interestedOnward, baseWeight: 7, actorIds: ["npc:manager"] }),
   event("airport_fansite_catches_silhouette", "publicOpinion", "站姐照片里出现你的衣角或背影", ["airport", "fandom", "privacy", "media"], { relationshipStages: noticedOnward, baseWeight: 7 }),
   event("airport_eye_contact_too_long", "relationship", "对视太久", ["airport", "relationship-progress", "high-risk"], { relationshipStages: interestedOnward, baseWeight: 7 }),
   event("airport_lead_blocks_camera", "relationship", "男主主动挡镜头", ["airport", "privacy", "relationship-progress", "high-risk"], { relationshipStages: ambiguousOnward, baseWeight: 6 }),
@@ -101,7 +101,7 @@ export const directedEventTemplates: EventTemplate[] = [
   event("airport_nonfan_area_glance", "publicOpinion", "男主看向非粉丝区域", ["airport", "fandom", "privacy", "high-risk"], { relationshipStages: interestedOnward, baseWeight: 6 }),
 
   // 公司干预事件：6 个条目。
-  event("company_manager_interview", "company", "经纪人约谈你", ["company-intervention", "work-contact"], { relationshipStages: interestedOnward, baseWeight: 7 }),
+  event("company_manager_interview", "company", "经纪人约谈你", ["company-intervention", "work-contact"], { relationshipStages: interestedOnward, baseWeight: 7, actorIds: ["npc:manager"] }),
   event("company_reduce_private_contact", "company", "公司要求男主减少私人联系", ["company-intervention", "relationship-progress"], { relationshipStages: interestedOnward, baseWeight: 6 }),
   event("company_staff_watch_phone", "company", "男主手机被工作人员关注", ["company-intervention", "privacy"], { relationshipStages: interestedOnward, baseWeight: 7 }),
   event("company_team_notices", "company", "团队成员察觉异常", ["company-intervention", "member-awareness"], { relationshipStages: interestedOnward, baseWeight: 7 }),
@@ -130,22 +130,22 @@ export const triggerEventTemplates: EventTemplate[] = [
   triggerReference("trigger_player_cries_at_home", "crisis", "你在大平层里突然哭出来", ["emotional", "housing"], "emotional_breakdown", { oncePerSave: true }),
   triggerReference("trigger_pressures_stack", "reality", "学业 / 工作 / 舆论 / 感情压力叠加", ["emotional", "school", "work-contact"], "emotional_breakdown"),
   triggerReference("trigger_lead_unreachable", "relationship", "男主联系不上", ["emotional", "relationship-progress"], "emotional_breakdown", { relationshipStages: noticedOnward }),
-  triggerReference("trigger_friend_intervenes", "daily", "闺蜜或青梅竹马介入", ["emotional", "daily-life"], "emotional_breakdown"),
+  triggerReference("trigger_friend_intervenes", "daily", "闺蜜或青梅竹马介入", ["emotional", "daily-life"], "emotional_breakdown", { actorIds: ["npc:friend"] }),
   triggerReference("trigger_player_doubts_relationship", "crisis", "你开始怀疑自己是否只是他人生里的风险", ["emotional", "relationship-progress"], "emotional_breakdown", { relationshipStages: interestedOnward }),
 
   triggerReference("trigger_exposure_anonymous_tip", "publicOpinion", "韩网匿名爆料", ["fandom", "sns", "media", "high-risk"], "exposure_crisis"),
   triggerReference("trigger_exposure_blurry_photo", "publicOpinion", "站姐发出模糊照片", ["fandom", "media", "privacy", "high-risk"], "exposure_crisis"),
   triggerReference("trigger_exposure_paparazzi_teaser", "crisis", "狗仔预告“明早十点”", ["paparazzi", "media", "high-risk"], "exposure_crisis", { oncePerSave: true }),
-  triggerReference("trigger_exposure_emergency_meeting", "company", "公司紧急会议", ["company-intervention", "high-risk"], "exposure_crisis"),
+  triggerReference("trigger_exposure_emergency_meeting", "company", "公司紧急会议", ["company-intervention", "high-risk"], "exposure_crisis", { actorIds: ["npc:manager"] }),
   triggerReference("trigger_exposure_cut_contact", "company", "男主被要求切断联系", ["company-intervention", "relationship-progress", "high-risk"], "exposure_crisis", { relationshipStages: interestedOnward, oncePerSave: true }),
-  triggerReference("trigger_exposure_fandom_split", "publicOpinion", "花园丝内部开始分裂讨论", ["fandom", "sns", "high-risk"], "exposure_crisis"),
+  triggerReference("trigger_exposure_fandom_split", "publicOpinion", "花园丝内部开始分裂讨论", ["fandom", "sns", "high-risk"], "exposure_crisis", { actorIds: ["npc:fandom-key-person"] }),
 
   triggerReference("trigger_recognized_near_lead", "publicOpinion", "有粉丝发现你常出现在男主附近", ["fandom", "privacy"], "player_recognized"),
   triggerReference("trigger_recognized_social_accounts", "crisis", "你的小红书 / Instagram / X 被扒", ["sns", "personal-data", "privacy", "high-risk"], "player_recognized", { oncePerSave: true }),
   triggerReference("trigger_recognized_personal_history", "crisis", "你的旧照片、学校、兼职地点被曝光", ["personal-data", "school", "part-time", "privacy", "high-risk"], "player_recognized", { oncePerSave: true }),
   triggerReference("trigger_recognized_called_partner", "publicOpinion", "你被称为“疑似嫂子”", ["fandom", "sns", "high-risk"], "player_recognized"),
   triggerReference("trigger_recognized_life_impact", "reality", "金钱、学业、工作、人际关系都会受影响", ["financial", "school", "work-contact", "high-risk"], "player_recognized"),
-  triggerReference("trigger_recognized_mother_calls", "reality", "妈妈可能打电话质问", ["family", "privacy"], "player_recognized"),
+  triggerReference("trigger_recognized_mother_calls", "reality", "妈妈可能打电话质问", ["family", "privacy"], "player_recognized", { actorIds: ["npc:mother"] }),
   triggerReference("trigger_recognized_company_alert", "company", "公司警觉度上升", ["company-intervention", "high-risk"], "player_recognized"),
   triggerReference("trigger_recognized_contact_reduced", "relationship", "男主可能因保护你而减少联系", ["privacy", "relationship-progress"], "player_recognized", { relationshipStages: noticedOnward }),
 
@@ -155,7 +155,7 @@ export const triggerEventTemplates: EventTemplate[] = [
   triggerReference("trigger_financial_hide_from_lead", "relationship", "你不想让男主知道", ["financial", "relationship-progress"], "financial_crisis", { relationshipStages: noticedOnward }),
   triggerReference("trigger_financial_help_pride_conflict", "relationship", "男主若强行帮助，可能造成自尊冲突", ["financial", "relationship-progress"], "financial_crisis", { relationshipStages: interestedOnward }),
 
-  triggerReference("trigger_company_formal_manager_talk", "company", "经纪人正式约谈", ["company-intervention", "high-risk"], "company_intervention", { baseWeight: 18 }),
+  triggerReference("trigger_company_formal_manager_talk", "company", "经纪人正式约谈", ["company-intervention", "high-risk"], "company_intervention", { baseWeight: 18, actorIds: ["npc:manager"] }),
   triggerReference("trigger_company_explain_relationship", "company", "公司要求男主交代关系", ["company-intervention", "relationship-progress", "high-risk"], "company_intervention", { relationshipStages: interestedOnward, baseWeight: 18 }),
   triggerReference("trigger_company_intense_schedule", "career", "男主被安排高强度行程", ["company-intervention", "overwork", "performance"], "company_intervention"),
   triggerReference("trigger_company_player_loses_opportunity", "company", "你被调离项目或失去工作机会", ["company-intervention", "work-contact", "high-risk"], "company_intervention", { oncePerSave: true }),

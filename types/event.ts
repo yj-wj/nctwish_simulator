@@ -1,6 +1,8 @@
 import type { CareerStage, GameModeId, RelationshipStageId, StatId } from "./game";
 import type { EventStatus, OutcomeTag, StoryFlagEffect } from "./history";
 import type { SpecialTriggerId, SpecialTriggerMatch } from "./rules";
+import type { EntityId } from "./memory";
+import type { EventWorldContext } from "./world";
 
 export type EventCategory =
   | "daily"
@@ -85,6 +87,8 @@ export interface EventTemplate {
   careerStages?: CareerStage[];
   gameModes?: GameModeId[];
   requiredTriggers?: SpecialTriggerId[];
+  /** Named participants used by World Context; no autonomous agent is created. */
+  actorIds?: EntityId[];
 }
 
 export interface EventHistoryEntry {
@@ -97,6 +101,7 @@ export interface EventHistoryEntry {
   status: EventStatus;
   settlementId?: string;
   flagEffects: StoryFlagEffect[];
+  actorIds?: EntityId[];
 }
 
 export type EventFilterReasonCode =
@@ -107,7 +112,8 @@ export type EventFilterReasonCode =
   | "missingTrigger"
   | "excludedByState"
   | "cooldown"
-  | "oncePerSave";
+  | "oncePerSave"
+  | "inactiveParticipant";
 
 export interface EventFilterReason {
   code: EventFilterReasonCode;
@@ -126,6 +132,7 @@ export interface EventWeightBreakdown {
   triggerModifier: number;
   careerStageModifier: number;
   recentEventPenalty: number;
+  worldModifier: number;
   finalWeight: number;
 }
 
@@ -139,6 +146,7 @@ export interface EventEngineContext {
   matchedTriggers?: SpecialTriggerMatch[];
   recentWindow?: number;
   seed?: number | string;
+  world?: EventWorldContext;
 }
 
 export interface EventEligibilityResult {

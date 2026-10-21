@@ -14,6 +14,26 @@ const gameStatsSchema = z.object(Object.fromEntries(allowedTurnStats.map((id) =>
 const entityIdSchema = z.string().min(1);
 const actionTypes = ["politeConversation", "simpleHelp", "workContact", "casualConcern", "privateMessage", "outsideWorkMeeting", "flirt", "jealousTest", "lateNightContact", "confession", "defineRelationship", "privateIntimacy", "publicRelationship", "breakup", "wait", "selfGrowth", "other"] as const;
 const actionSemanticTags = ["self_protection", "withdraw", "keep_distance", "wait", "maintain_relationship", "temporary_distance", "self_growth", "study", "career", "independent_life"] as const;
+const worldTriggerTypes = ["relationship_confirmed", "exposure_started", "public_opinion_crisis", "company_intervention", "career_breakdown", "temporary_distance", "major_argument", "financial_crisis"] as const;
+
+export const unifiedWorldContextSchema = z.object({
+  gameState: z.object({ week: z.number().int().positive(), scene: z.string(), careerStage: z.string(), stats: gameStatsSchema }).strict(),
+  relationshipStage: z.enum(relationshipStages),
+  storyFacts: z.array(z.enum(storyFlags)),
+  currentEvent: z.object({ id: z.string(), category: z.enum(eventCategories), title: z.string(), actorIds: z.array(entityIdSchema) }).strict().nullable(),
+  relevantNPCs: z.array(z.object({
+    id: z.string().regex(/^npc:/), name: z.string(), role: z.string(), relationshipToPlayer: z.string(),
+    personality: z.array(z.string()),
+    relationship: z.object({ trust: z.number(), closeness: z.number(), tension: z.number() }).strict(),
+    tags: z.array(z.string()),
+  }).strict()).max(4),
+  activeCrises: z.array(z.object({ id: z.enum(["exposure", "public_opinion", "company", "career", "financial", "separation"]), sourceIds: z.array(z.string()) }).strict()),
+  recentEventIds: z.array(z.string()).max(4),
+  relevantMemories: z.array(z.object({ id: z.string(), content: z.string(), actors: z.array(entityIdSchema), tags: z.array(z.string()), visibility: z.enum(["player_known", "shared", "hidden"]) }).strict()).max(6),
+  recentChatOutcomes: z.array(z.string()).max(3),
+  recentSNSOutcomes: z.array(z.string()).max(3),
+  pendingTriggerTypes: z.array(z.enum(worldTriggerTypes)),
+}).strict();
 
 export const actionInterpretationInputSchema = z.object({
   promptVersion: z.literal("action-v1"),
@@ -63,7 +83,7 @@ export const storyGenerationInputSchema = z.object({
       week: z.number().int().positive(), scene: z.string().min(1), careerStage: z.string().min(1),
       relationshipStage: z.enum(relationshipStages), stats: gameStatsSchema,
     }).strict(),
-    event: z.object({ id: z.string().min(1), category: z.enum(eventCategories), title: z.string().min(1), description: z.string().nullable(), tags: z.array(z.string().min(1)) }).strict().nullable(),
+    event: z.object({ id: z.string().min(1), category: z.enum(eventCategories), title: z.string().min(1), description: z.string().nullable(), tags: z.array(z.string().min(1)), actorIds: z.array(entityIdSchema) }).strict().nullable(),
     ruleEvaluation: z.object({
       allowedInteractionLevel: z.enum(["formal", "familiar", "privateContact", "limitedIntimacy", "privateRelationship", "intimateRelationship", "majorDecision"]),
       allowedActionTypes: z.array(z.enum(actionTypes)),
@@ -72,6 +92,7 @@ export const storyGenerationInputSchema = z.object({
       allowedInteractions: z.array(z.string().min(1)), prohibitedInteractions: z.array(z.string().min(1)),
     }).strict(),
     storyFacts: z.array(z.enum(storyFlags)),
+    world: unifiedWorldContextSchema,
     continuity: z.object({
       turnPhase: z.enum(["new_game_first_turn", "subsequent_turn"]),
       recentOpenings: z.array(z.string().trim().min(1).max(160)).max(3),

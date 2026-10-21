@@ -6,6 +6,8 @@ import type { ChoiceHistoryRecord, StoryFlagState, WeeklyStateSnapshot } from ".
 import type { MemoryRecord } from "./memory";
 import type { RuleEvaluation } from "./rules";
 import type { StateChangeLogEntry, StateEffects } from "./state";
+import type { WorldState } from "./world";
+import type { ChatTurnRecord } from "./chat";
 
 export type SNSAccountType = "official" | "company" | "media" | "fansite" | "fan" | "anonymous";
 export type SNSSentiment = "positive" | "neutral" | "mixed" | "negative";
@@ -67,6 +69,8 @@ export interface SNSDomainState {
   processedSettlementIds: string[];
   snsPosts: SNSPost[];
   snsTriggers: SNSGenerationTrigger[];
+  worldState: WorldState;
+  chatTurns: ChatTurnRecord[];
 }
 
 export interface SNSPostRejection {

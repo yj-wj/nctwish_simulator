@@ -58,7 +58,7 @@ export function buildStoryPrompt(input: StoryGenerationInput): StoryPrompt {
       },
       {
         id: "STATE_CONTEXT",
-        content: JSON.stringify({ gameState: context.gameState, storyFacts: context.storyFacts }),
+        content: JSON.stringify({ gameState: context.gameState, storyFacts: context.storyFacts, world: context.world }),
       },
       {
         id: "MEMORY_CONTEXT",

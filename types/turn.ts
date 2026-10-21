@@ -7,6 +7,9 @@ import type { ChoiceHistoryRecord, ChoiceTag, OutcomeTag, StoryFlagEffect, Story
 import type { MemoryEffect, MemoryRecord } from "./memory.ts";
 import type { RuleEvaluation, StructuredPlayerAction } from "./rules.ts";
 import type { EffectMagnitude, StateChangeLogEntry, StateEffects } from "./state.ts";
+import type { ChatTurnRecord } from "./chat.ts";
+import type { SNSGenerationTrigger, SNSPost } from "./sns.ts";
+import type { WorldState } from "./world.ts";
 
 export type TurnStatus = "idle" | "interpreting" | "generating" | "validating" | "settling" | "completed" | "error";
 export type TurnInputKind = "preset_choice" | "free_action";
@@ -35,6 +38,10 @@ export interface TurnDomainState {
   eventSeed: number;
   /** Runtime-only narrative openings used to vary prose; never affects formal game rules. */
   recentStoryOpenings?: string[];
+  worldState: WorldState;
+  chatTurns: ChatTurnRecord[];
+  snsPosts: SNSPost[];
+  snsTriggers: SNSGenerationTrigger[];
 }
 
 export type EffectRejectionReason =

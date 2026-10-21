@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { allowedChoiceTags, allowedEffectMagnitudes, allowedOutcomeTags, allowedTurnStats } from "../config/turn-policy.ts";
 import { CHAT_PROMPT_VERSION } from "../config/chat.ts";
+import { unifiedWorldContextSchema } from "./schemas.ts";
 
 const relationshipStages = ["strangers", "noticed", "interested", "ambiguous", "committed", "inLove", "trial"] as const;
 const entityIdSchema = z.string().min(1);
@@ -24,6 +25,7 @@ export const chatGenerationInputSchema = z.object({
       mood: z.number(), secrecy: z.number(), companyAlert: z.number(), careerPressure: z.number(),
     }).strict(),
     storyFacts: z.array(z.string().min(1)),
+    world: unifiedWorldContextSchema,
     recentMessages: z.array(z.object({ senderId: z.string().min(1), content: z.string().min(1), sequence: z.number().int().nonnegative() }).strict()).max(10),
     relevantMemories: z.array(z.object({ id: z.string().min(1), summary: z.string().min(1), type: z.string().min(1), importance: z.number().int().min(1).max(5) }).strict()).max(6),
     ruleEvaluation: z.object({

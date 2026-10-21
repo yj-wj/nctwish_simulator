@@ -2,6 +2,7 @@ import type { GameSave, GameSaveData, SaveLoadErrorCode, SaveSummary } from "../
 import { GAME_SAVE_SCHEMA_VERSION } from "../types/save.ts";
 import type { SaveStorageAdapter } from "./localStorageAdapter.ts";
 import { gameSaveDataSchema, gameSaveSchema, saveEnvelopeSchema, saveIndexSchema } from "./saveSchema.ts";
+import { createInitialWorldState } from "../game/worldEngine.ts";
 
 export const SAVE_STORAGE_KEYS = {
   save: (saveId: string) => `garden:saves:v1:${saveId}`,
@@ -91,7 +92,7 @@ export function createSaveRepository(
     if (!envelope.success) {
       throw new SaveRepositoryError("invalid_schema", `Save ${saveId} is missing schemaVersion.`);
     }
-    if (![1, 2, GAME_SAVE_SCHEMA_VERSION].includes(envelope.data.schemaVersion)) {
+    if (![1, 2, 3, GAME_SAVE_SCHEMA_VERSION].includes(envelope.data.schemaVersion)) {
       throw new SaveRepositoryError(
         "unsupported_version",
         `Save ${saveId} uses unsupported schema version ${envelope.data.schemaVersion}.`,
@@ -102,8 +103,8 @@ export function createSaveRepository(
           ...(parsed as Record<string, unknown>),
           schemaVersion: GAME_SAVE_SCHEMA_VERSION,
           ...(envelope.data.schemaVersion === 1 ? { chatThreads: [], chatMessages: [], chatTurns: [], incomingMessageTriggers: [] } : {}),
-          snsPosts: [],
-          snsTriggers: [],
+          ...(envelope.data.schemaVersion <= 2 ? { snsPosts: [], snsTriggers: [] } : {}),
+          worldState: createInitialWorldState(),
         }
       : parsed;
     const result = gameSaveSchema.safeParse(migrated);

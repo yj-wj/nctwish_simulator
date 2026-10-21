@@ -7,6 +7,8 @@ import type { RuleEvaluation } from "./rules";
 import type { StateChangeLogEntry, StateEffects } from "./state";
 import type { EventHistoryEntry } from "./event";
 import type { SanitizedEffects } from "./turn";
+import type { WorldState } from "./world";
+import type { SNSGenerationTrigger, SNSPost } from "./sns";
 
 export type ChatMessageSource = "player" | "ai" | "system";
 export type ChatTurnStatus = "idle" | "generating" | "validating" | "settling" | "completed" | "error";
@@ -70,6 +72,9 @@ export interface ChatDomainState {
   chatThreads: ChatThread[];
   chatMessages: ChatMessage[];
   chatTurns: ChatTurnRecord[];
+  worldState: WorldState;
+  snsPosts: SNSPost[];
+  snsTriggers: SNSGenerationTrigger[];
 }
 
 export type ChatTurnInput =

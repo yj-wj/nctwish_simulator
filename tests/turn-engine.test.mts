@@ -17,6 +17,7 @@ import { evaluateAction } from "../game/ruleEngine.ts";
 import type { MemoryRecord } from "../types/memory.ts";
 import type { TurnAIServices } from "../game/turnEngine.ts";
 import type { TurnDomainState, TurnPlayerInput } from "../types/turn.ts";
+import { createInitialWorldState } from "../game/worldEngine.ts";
 
 function gameState(affection = 8) {
   return {
@@ -43,6 +44,7 @@ function domain(affection = 8, memories: MemoryRecord[] = []): TurnDomainState {
     selectedEventId: null,
     selectedEventRecordId: null,
     eventSeed: 3,
+    worldState: createInitialWorldState(), chatTurns: [], snsPosts: [], snsTriggers: [],
   };
 }
 

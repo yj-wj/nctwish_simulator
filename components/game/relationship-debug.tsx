@@ -14,6 +14,8 @@ import { SaveSystemDebug } from "./save-system-debug";
 import { StateEngineDebug } from "./state-engine-debug";
 import { AIDebug } from "./ai-debug";
 import { TurnTraceDebug } from "./turn-trace-debug";
+import { WorldDebug } from "./world-debug";
+import { buildEventWorldContext } from "@/game/worldContextBuilder";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
 const debugStats: { id: StatId; label: string; max: number }[] = [
@@ -42,6 +44,12 @@ export function RelationshipDebug() {
   const eventSeed = useGameStore((state) => state.eventSeed);
   const storedResult = useGameStore((state) => state.eventEngineResult);
   const selectedEventId = useGameStore((state) => state.selectedEventId);
+  const worldState = useGameStore((state) => state.worldState);
+  const storyFlags = useGameStore((state) => state.storyFlags);
+  const memories = useGameStore((state) => state.memories);
+  const chatTurns = useGameStore((state) => state.chatTurns);
+  const snsPosts = useGameStore((state) => state.snsPosts);
+  const snsTriggers = useGameStore((state) => state.snsTriggers);
   const setAffection = useGameStore((state) => state.setAffection);
   const setDebugStat = useGameStore((state) => state.setDebugStat);
   const setDebugGameMode = useGameStore((state) => state.setDebugGameMode);
@@ -49,9 +57,9 @@ export function RelationshipDebug() {
   const generate = useGameStore((state) => state.generateNextMockEvent);
   const previewResult = useMemo(
     () => process.env.NODE_ENV === "development" && gameState
-      ? runEventEngine(gameState, { history: eventHistory, seed: eventSeed })
+      ? runEventEngine(gameState, { history: eventHistory, seed: eventSeed, world: buildEventWorldContext({ gameState, worldState, storyFlags, eventHistory, memories, chatTurns, snsPosts, snsTriggers }) })
       : null,
-    [eventHistory, eventSeed, gameState],
+    [eventHistory, eventSeed, gameState, worldState, storyFlags, memories, chatTurns, snsPosts, snsTriggers],
   );
 
   if (process.env.NODE_ENV !== "development" || !gameState) return null;
@@ -86,7 +94,7 @@ export function RelationshipDebug() {
     </div>
 
     <details className="debug-details"><summary>Eligible Events / Final Weight</summary><div className="debug-event-list">
-      {result?.eligibleEvents.map(({ event, weight }) => <p key={event.id}><span>{event.title} · {categoryLabels[event.category]}</span><b>{weight.finalWeight}</b><small>base {weight.baseWeight} × mode {weight.gameModeModifier} × relation {weight.relationshipModifier} × trigger {weight.triggerModifier} × career {weight.careerStageModifier} × recent {weight.recentEventPenalty}</small></p>)}
+      {result?.eligibleEvents.map(({ event, weight }) => <p key={event.id}><span>{event.title} · {categoryLabels[event.category]}</span><b>{weight.finalWeight}</b><small>base {weight.baseWeight} × mode {weight.gameModeModifier} × relation {weight.relationshipModifier} × trigger {weight.triggerModifier} × career {weight.careerStageModifier} × recent {weight.recentEventPenalty} × world {weight.worldModifier}</small></p>)}
     </div></details>
     <details className="debug-details"><summary>Filtered Events / Reason</summary><div className="debug-event-list">
       {result?.filteredEvents.map(({ event, reasons }) => <p key={event.id}><span>{event.title}</span><small>{reasons.map(({ code }) => code).join(", ")}</small></p>)}
@@ -100,5 +108,6 @@ export function RelationshipDebug() {
     <SaveSystemDebug />
     <AIDebug />
     <TurnTraceDebug />
+    <WorldDebug />
   </section>;
 }
