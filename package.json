@@ -18,9 +18,10 @@
     "test:ai-provider": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ai-provider.test.mts",
     "test:turn": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/turn-engine.test.mts",
     "test:chat": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/chat-engine.test.mts",
+    "test:sns": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/sns-engine.test.mts",
     "test:ai:live": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ai-live.test.mts",
     "test:endings": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/ending-engine.test.mts",
-    "test:unit": "npm run test:relationship && npm run test:rules && npm run test:events && npm run test:state && npm run test:history && npm run test:memory && npm run test:save && npm run test:endings && npm run test:ai && npm run test:ai-provider && npm run test:turn && npm run test:chat",
+    "test:unit": "npm run test:relationship && npm run test:rules && npm run test:events && npm run test:state && npm run test:history && npm run test:memory && npm run test:save && npm run test:endings && npm run test:ai && npm run test:ai-provider && npm run test:turn && npm run test:chat && npm run test:sns",
     "test:e2e": "playwright test"
   },
   "dependencies": {

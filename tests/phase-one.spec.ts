@@ -79,13 +79,9 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     page.getByText("我们还没有熟到可以这样说。", { exact: true }),
   ).toBeVisible();
   await noOverflow(page);
-  await nav.getByRole("link", { name: "SNS", exact: true }).click();
-  const like = page.getByRole("button", { name: "赞 花园里的观众" });
-  await like.click();
-  await expect(like).toHaveAttribute("aria-pressed", "true");
-  await expect(like).toContainText("129");
-  await like.click();
-  await expect(like).toContainText("128");
+  await nav.getByRole("link", { name: /^SNS/ }).click();
+  await expect(page.getByRole("heading", { name: "SNS 广场" })).toBeVisible();
+  await expect(page.locator(".sns-post, .sns-feed-state").first()).toBeVisible();
   await noOverflow(page);
   await nav.getByRole("link", { name: "人物", exact: true }).click();
   await expect(page.locator(".profile-name")).toContainText("前田陆");

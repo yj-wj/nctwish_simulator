@@ -7,7 +7,9 @@ import { createServerAIProvider } from "../ai/server/providerFactory.ts";
 import type { QwenServerConfig } from "../ai/server/serverConfig.ts";
 import { actionInterpretationOutputSchema, storyGenerationOutputSchema } from "../ai/schemas.ts";
 import { chatGenerationOutputSchema } from "../ai/chatSchemas.ts";
+import { snsGenerationOutputSchema } from "../ai/snsSchemas.ts";
 import { buildChatContext } from "../game/chatContextBuilder.ts";
+import { buildSNSContext } from "../game/snsContextBuilder.ts";
 import { evaluateAction } from "../game/ruleEngine.ts";
 import { buildActionInterpretationInput, buildStoryGenerationInput } from "../game/contextBuilder.ts";
 import type { EventHistoryEntry } from "../types/event.ts";
@@ -46,13 +48,16 @@ function config(overrides: Partial<QwenServerConfig> = {}): QwenServerConfig {
     actionModel: "qwen3.7-flash",
     storyModel: "qwen3.7-plus",
     chatModel: "qwen3.7-plus",
+    snsModel: "qwen3.7-plus",
     enableThinking: false,
     actionMaxCompletionTokens: 650,
     storyMaxCompletionTokens: 2000,
     chatMaxCompletionTokens: 900,
+    snsMaxCompletionTokens: 1200,
     actionTimeoutMs: 1000,
     storyTimeoutMs: 1000,
     chatTimeoutMs: 1000,
+    snsTimeoutMs: 1000,
     maxRetries: 1,
     ...overrides,
   };
@@ -81,6 +86,9 @@ const validStory = {
 const validChat = {
   messages: ["看到了。", "忙完我会回复。"], effectCategory: "none",
   suggestedEffects: [], suggestedChoiceTags: [], suggestedOutcomeTags: [], memoryCandidates: [],
+};
+const validSNS = {
+  posts: [{ authorId: "media-1", authorName: "娱乐观察", handle: "@scene_watch", accountType: "media", content: "公开视频正在引发讨论，目前没有更多信息。", visibility: "public", sentiment: "mixed", topicTags: ["exposure", "privacy"] }],
 };
 
 function response(content: unknown, model: string, usage = { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 }, status = 200) {
@@ -168,6 +176,29 @@ test("valid Chat uses configured chat model, compact prompt and strict schema", 
   assert.equal(sent.max_completion_tokens, 900);
   assert.match(sent.messages[0].content, /1-4 short, natural chat messages/);
   assert.match(sent.messages[0].content, /Do not reopen with Seoul weather/);
+});
+
+test("valid SNS uses configured model, public-only context and strict schema", async () => {
+  let requestBody = "";
+  const provider = new QwenAIProvider(config(), async (_url, init) => {
+    requestBody = String(init?.body);
+    return response(validSNS, "qwen3.7-plus");
+  });
+  const input = buildSNSContext({
+    gameState: state, eventHistory: [], choiceHistory: [], weeklyHistory: [], storyFlags: flags,
+    memories: [hiddenManagerMemory], processedSettlementIds: [], snsPosts: [], snsTriggers: [],
+  }, {
+    id: "sns:test", reason: "exposure_leak", level: "crisis", week: state.week,
+    sourceCategory: "crisis", sourceTags: ["media", "privacy", "high-risk"],
+    publicTitle: "偷拍视频传播", publicSummary: "公开视频正在网络上传播。", status: "pending",
+  });
+  const result = await provider.generateSNS(input);
+  assert.equal(snsGenerationOutputSchema.safeParse(result.data).success, true);
+  const sent = JSON.parse(requestBody);
+  assert.equal(sent.model, "qwen3.7-plus");
+  assert.equal(sent.max_completion_tokens, 1200);
+  assert.equal(requestBody.includes("SECRET_MANAGER_ONLY_MARKER"), false);
+  assert.match(sent.messages[0].content, /Never infer or reveal private chats, Hidden Memory/);
 });
 
 test("Qwen payload excludes player-invisible Hidden Memory and results never expose the API key", async () => {

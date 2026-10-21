@@ -216,6 +216,23 @@ const incomingMessageTriggerSchema = z.object({
   reason: z.enum(["relationship_confirmed_follow_up", "exposure_concern", "career_pressure_check_in"]),
   contextTags: z.array(z.string()), week: z.number().int().min(1), status: z.enum(["pending", "delivered"]),
 });
+const snsAccountTypeSchema = z.enum(["official", "company", "media", "fansite", "fan", "anonymous"]);
+const snsPostTagSchema = z.enum(["official", "performance", "airport", "fandom", "relationship_rumor", "exposure", "company", "privacy", "career"]);
+const snsReasonSchema = z.enum(["performance_buzz", "airport_sighting", "fandom_discussion", "company_statement", "relationship_rumor", "exposure_leak", "paparazzi_exposure", "popularity_spike"]);
+const snsLevelSchema = z.enum(["normal", "attention", "rumor", "controversy", "crisis"]);
+const snsPostSchema = z.object({
+  id: z.string().min(1), authorId: z.string().min(1), authorName: z.string().min(1), handle: z.string().min(1), accountType: snsAccountTypeSchema,
+  content: z.string().min(1), week: z.number().int().min(1), sequence: z.number().int().min(1), tags: z.array(snsPostTagSchema),
+  visibility: z.enum(["public", "fandom"]), sentiment: z.enum(["positive", "neutral", "mixed", "negative"]),
+  reactions: z.object({ likes: z.number().int().nonnegative(), reposts: z.number().int().nonnegative(), comments: z.number().int().nonnegative(), heat: z.number().int().nonnegative() }),
+  sourceTriggerId: z.string().min(1), sourceEventId: z.string().optional(), sourceTurnId: z.string().optional(), read: z.boolean(), createdAt: z.iso.datetime(),
+});
+const snsTriggerSchema = z.object({
+  id: z.string().min(1), reason: snsReasonSchema, level: snsLevelSchema, week: z.number().int().min(1),
+  sourceEventId: z.string().optional(), sourceTurnId: z.string().optional(), sourceCategory: eventCategorySchema,
+  sourceTags: z.array(eventTagSchema), publicTitle: z.string().min(1), publicSummary: z.string().min(1),
+  status: z.enum(["pending", "processing", "delivered"]),
+});
 
 export const gameSaveDataSchema = z.object({
   playerSetup: playerDraftSchema,
@@ -230,6 +247,8 @@ export const gameSaveDataSchema = z.object({
   chatMessages: z.array(chatMessageSchema),
   chatTurns: z.array(chatTurnSchema),
   incomingMessageTriggers: z.array(incomingMessageTriggerSchema),
+  snsPosts: z.array(snsPostSchema),
+  snsTriggers: z.array(snsTriggerSchema),
   runtime: z.object({
     playerConfirmed: z.boolean(),
     characterConfirmed: z.boolean(),

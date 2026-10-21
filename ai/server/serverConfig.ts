@@ -6,13 +6,16 @@ export interface QwenServerConfig {
   actionModel: string;
   storyModel: string;
   chatModel: string;
+  snsModel: string;
   enableThinking: boolean;
   actionMaxCompletionTokens: number;
   storyMaxCompletionTokens: number;
   chatMaxCompletionTokens: number;
+  snsMaxCompletionTokens: number;
   actionTimeoutMs: number;
   storyTimeoutMs: number;
   chatTimeoutMs: number;
+  snsTimeoutMs: number;
   maxRetries: number;
 }
 
@@ -25,6 +28,7 @@ export interface ServerAIConfig {
     actionModel: string;
     storyModel: string;
     chatModel: string;
+    snsModel: string;
     configured: boolean;
     enableThinking: boolean;
     missing: Array<"apiKey" | "baseUrl">;
@@ -47,6 +51,7 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
   const actionModel = env.ACTION_MODEL?.trim() || AI_PROVIDER_DEFAULTS.actionModel;
   const storyModel = env.STORY_MODEL?.trim() || AI_PROVIDER_DEFAULTS.storyModel;
   const chatModel = env.CHAT_MODEL?.trim() || storyModel;
+  const snsModel = env.SNS_MODEL?.trim() || storyModel;
   const apiKey = env.DASHSCOPE_API_KEY?.trim() || "";
   const baseUrl = env.DASHSCOPE_BASE_URL?.trim() || "";
   const missing: Array<"apiKey" | "baseUrl"> = [];
@@ -59,13 +64,16 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
     actionModel,
     storyModel,
     chatModel,
+    snsModel,
     enableThinking: AI_PROVIDER_DEFAULTS.enableThinking,
     actionMaxCompletionTokens: AI_PROVIDER_DEFAULTS.actionMaxCompletionTokens,
     storyMaxCompletionTokens: AI_PROVIDER_DEFAULTS.storyMaxCompletionTokens,
     chatMaxCompletionTokens: AI_PROVIDER_DEFAULTS.chatMaxCompletionTokens,
+    snsMaxCompletionTokens: AI_PROVIDER_DEFAULTS.snsMaxCompletionTokens,
     actionTimeoutMs: AI_PROVIDER_DEFAULTS.actionTimeoutMs,
     storyTimeoutMs: AI_PROVIDER_DEFAULTS.storyTimeoutMs,
     chatTimeoutMs: AI_PROVIDER_DEFAULTS.chatTimeoutMs,
+    snsTimeoutMs: AI_PROVIDER_DEFAULTS.snsTimeoutMs,
     maxRetries: AI_PROVIDER_DEFAULTS.maxRetries,
   } : null;
   return {
@@ -77,6 +85,7 @@ export function readServerAIConfig(env: NodeJS.ProcessEnv = process.env): Server
       actionModel,
       storyModel,
       chatModel,
+      snsModel,
       configured,
       enableThinking: AI_PROVIDER_DEFAULTS.enableThinking,
       missing,

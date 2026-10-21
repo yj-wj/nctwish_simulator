@@ -16,5 +16,6 @@ const links = [
 export function BottomNav() {
   const pathname = usePathname();
   const unread = useGameStore((state) => state.chatThreads.reduce((sum, thread) => sum + thread.unreadCount, 0));
-  return <nav className="bottom-nav" aria-label="游戏导航">{links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={pathname === href ? "active" : ""} aria-current={pathname === href ? "page" : undefined}><Icon size={20} strokeWidth={1.6} /><span>{label}</span>{href === "/game/messages" && unread > 0 && <b className="nav-unread" aria-label={`${unread} 条未读消息`}>{unread}</b>}{pathname === href && <i />}</Link>)}</nav>;
+  const snsUnread = useGameStore((state) => state.snsPosts.filter(({ read }) => !read).length + state.snsTriggers.filter(({ status }) => status === "pending").length);
+  return <nav className="bottom-nav" aria-label="游戏导航">{links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} className={pathname === href ? "active" : ""} aria-current={pathname === href ? "page" : undefined}><Icon size={20} strokeWidth={1.6} /><span>{label}</span>{href === "/game/messages" && unread > 0 && <b className="nav-unread" aria-label={`${unread} 条未读消息`}>{unread}</b>}{href === "/game/sns" && snsUnread > 0 && <b className="nav-unread" aria-label={`${snsUnread} 条 SNS 更新`}>{snsUnread}</b>}{pathname === href && <i />}</Link>)}</nav>;
 }

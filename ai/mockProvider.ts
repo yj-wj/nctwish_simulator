@@ -2,6 +2,7 @@ import type { AIProvider } from "./provider.ts";
 import type { ActionInterpretationInput, ActionInterpretationOutput, StoryGenerationInput, StoryGenerationOutput } from "./schemas.ts";
 import { actionInterpretationInputSchema, actionInterpretationOutputSchema, storyGenerationInputSchema, storyGenerationOutputSchema } from "./schemas.ts";
 import { chatGenerationInputSchema, chatGenerationOutputSchema, type ChatGenerationInput, type ChatGenerationOutput } from "./chatSchemas.ts";
+import { snsGenerationInputSchema, snsGenerationOutputSchema, type SNSGenerationInput, type SNSGenerationOutput } from "./snsSchemas.ts";
 
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
@@ -111,6 +112,26 @@ export class MockAIProvider implements AIProvider {
       memoryCandidates: important ? [{ type: "relationship", summary: "玩家明确表示自己害怕重要的人突然失联。", actors: ["player", input.context.maleLead.id], tags: ["relationship", "communication"], importance: 4 }] : [],
     };
     return { data: chatGenerationOutputSchema.parse(output), metadata: { provider: "mock" as const, model: "mock-chat-v1", latencyMs: 0, usage: { inputTokens: null, outputTokens: null, totalTokens: null }, success: true as const } };
+  }
+
+  async generateSNS(rawInput: SNSGenerationInput) {
+    const input = snsGenerationInputSchema.parse(rawInput);
+    const { trigger } = input.context;
+    const company = trigger.reason === "company_statement";
+    const exposure = ["exposure_leak", "paparazzi_exposure", "relationship_rumor"].includes(trigger.reason);
+    const output: SNSGenerationOutput = {
+      posts: [{
+        authorId: company ? "official-company" : exposure ? "dispatch-watch" : "garden-update",
+        authorName: company ? "公司官方" : exposure ? "娱乐观察" : "花园资讯站",
+        handle: company ? "@official_notice" : exposure ? "@scene_watch" : "@garden_update",
+        accountType: company ? "company" : exposure ? "media" : trigger.allowedAccountTypes[0],
+        content: company ? `公司就“${trigger.publicTitle}”发布说明，请以官方信息为准。` : exposure ? `关于“${trigger.publicTitle}”的公开画面正在引发讨论，目前仍没有足够信息确认更多细节。` : `${trigger.publicTitle}引起关注：${trigger.publicSummary}`,
+        visibility: "public",
+        sentiment: trigger.level === "crisis" ? "negative" : trigger.level === "attention" ? "positive" : "mixed",
+        topicTags: trigger.allowedTopicTags,
+      }],
+    };
+    return { data: snsGenerationOutputSchema.parse(output), metadata: { provider: "mock" as const, model: "mock-sns-v1", latencyMs: 0, usage: { inputTokens: null, outputTokens: null, totalTokens: null }, success: true as const } };
   }
 }
 

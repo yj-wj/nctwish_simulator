@@ -176,6 +176,17 @@ button { transition: background-color .18s, border-color .18s, transform .18s; }
 .chat-error { padding: 9px 11px; border: 1px solid #d6a5a5; border-radius: 7px; background: #fff4f2; color: #963f48; }
 .chat-typing { color: #7a8578; }
 .chat-debug { margin-top: 18px; }
+.sns-feed-state { min-height: 180px; display: grid; place-items: center; align-content: center; gap: 10px; text-align: center; padding: 28px; }
+.sns-feed-state p { max-width: 520px; color: var(--ink-soft); }
+.sns-feed-state button { border: 1px solid var(--line); border-radius: 999px; padding: 7px 15px; background: var(--paper); }
+.sns-error { color: #9f3434; }
+.sns-topics { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; color: var(--sage-deep); font-size: .78rem; }
+.sns-reactions { display: inline-flex; align-items: center; gap: 5px; }
+.sns-positive { border-left: 3px solid #7fa588; }
+.sns-mixed { border-left: 3px solid #b59b69; }
+.sns-negative { border-left: 3px solid #aa6f6f; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 @media (min-width: 1500px) { .landing-hero { padding-top: 100px; padding-bottom: 90px; }.night-garden { height: 530px; } }
 @media (max-width: 1050px) { .brand small { display: none; }.landing-hero { gap: 6%; padding-top: 55px; }.night-garden { height: 430px; }.hero-copy h1 { font-size: 36px; letter-spacing: 0; }.hero-description { font-size: 12px; }.hero-copy > .eyebrow { font-size: 7px; letter-spacing: 1.5px; }.game-context { align-items: start; }.context-details { flex-wrap: wrap; justify-content: end; gap: 8px 15px; }.stat-item { padding: 0 11px; }.stat-label { font-size: 9px; gap: 4px; }.story-layout { grid-template-columns: minmax(0, 1fr) 220px; gap: 20px; }.story-paper { padding: 26px; }.story-paper h1 { font-size: 25px; }.companion-card .character-visual { height: 200px; }.pace-grid { grid-template-columns: 1fr 1fr; }.profile-layout { grid-template-columns: 240px 1fr; gap: 28px; } }
 @media (max-width: 760px) {

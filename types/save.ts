@@ -5,8 +5,9 @@ import type { MemoryRecord } from "./memory";
 import type { ActionReceipt, StoryChoice } from "./ui";
 import type { StoryGenerationOutput } from "../ai/schemas";
 import type { ChatMessage, ChatThread, ChatTurnRecord, IncomingMessageTrigger } from "./chat";
+import type { SNSGenerationTrigger, SNSPost } from "./sns";
 
-export const GAME_SAVE_SCHEMA_VERSION = 2 as const;
+export const GAME_SAVE_SCHEMA_VERSION = 3 as const;
 
 export interface GameSaveRuntime {
   playerConfirmed: boolean;
@@ -38,6 +39,8 @@ export interface GameSaveData {
   chatMessages: ChatMessage[];
   chatTurns: ChatTurnRecord[];
   incomingMessageTriggers: IncomingMessageTrigger[];
+  snsPosts: SNSPost[];
+  snsTriggers: SNSGenerationTrigger[];
   runtime: GameSaveRuntime;
 }
 

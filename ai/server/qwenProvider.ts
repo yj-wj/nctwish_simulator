@@ -8,6 +8,8 @@ import { validateStoryOutput } from "../outputValidator.ts";
 import type { QwenServerConfig } from "./serverConfig.ts";
 import { chatGenerationInputSchema, chatGenerationOutputSchema, type ChatGenerationInput, type ChatGenerationOutput } from "../chatSchemas.ts";
 import { buildChatPrompt } from "../prompts/chatPrompt.ts";
+import { snsGenerationInputSchema, snsGenerationOutputSchema, type SNSGenerationInput, type SNSGenerationOutput } from "../snsSchemas.ts";
+import { buildSNSPrompt } from "../prompts/snsPrompt.ts";
 
 export type QwenErrorCode = "network_error" | "timeout" | "authentication_error" | "rate_limit" | "upstream_error" | "malformed_response" | "schema_validation_error";
 
@@ -184,6 +186,30 @@ export class QwenAIProvider implements AIProvider {
       }
     }
     throw new QwenProviderError("schema_validation_error", "Chat validation failed.", 502, false, this.config.chatModel, 0);
+  }
+
+  async generateSNS(rawInput: SNSGenerationInput): Promise<AIProviderResult<SNSGenerationOutput>> {
+    const input = snsGenerationInputSchema.parse(rawInput);
+    const prompt = buildSNSPrompt(input);
+    for (let schemaAttempt = 0; schemaAttempt <= this.config.maxRetries; schemaAttempt += 1) {
+      const response = await this.request({
+        model: this.config.snsModel,
+        timeoutMs: this.config.snsTimeoutMs,
+        maxCompletionTokens: this.config.snsMaxCompletionTokens,
+        messages: [{ role: "system", content: prompt.system }, { role: "user", content: prompt.user }],
+        responseFormat: createQwenJSONSchema("sns_generation", snsGenerationOutputSchema),
+      });
+      let parsed: unknown;
+      try { parsed = this.parseContent(response.body, response.model, response.latencyMs); }
+      catch (error) {
+        if (error instanceof QwenProviderError && error.code === "malformed_response" && schemaAttempt < this.config.maxRetries) continue;
+        throw error;
+      }
+      const validation = snsGenerationOutputSchema.safeParse(parsed);
+      if (validation.success) return { data: validation.data, metadata: { provider: "qwen", model: response.model, latencyMs: response.latencyMs, usage: usageOf(response.body), success: true } };
+      if (schemaAttempt === this.config.maxRetries) throw new QwenProviderError("schema_validation_error", `SNS output failed validation: ${validation.error.issues.map((issue) => issue.message).join(" | ")}`, 502, false, response.model, response.latencyMs);
+    }
+    throw new QwenProviderError("schema_validation_error", "SNS validation failed.", 502, false, this.config.snsModel, 0);
   }
 
   private parseContent(body: QwenResponseBody, model: string, latencyMs: number): unknown {

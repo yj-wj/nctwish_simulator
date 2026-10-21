@@ -6,7 +6,7 @@ import { getHistoryTestFixture } from "@/config/history-fixtures";
 import { initialStoryFlags } from "@/config/history";
 import { mockChoiceEffects } from "@/config/mock-choice-effects";
 import { generatedChoiceDefaults } from "@/config/turn-policy";
-import { generateChatWithServer, generateStoryWithServer, interpretActionWithServer, AIClientError } from "@/ai/client";
+import { generateChatWithServer, generateSNSWithServer, generateStoryWithServer, interpretActionWithServer, AIClientError } from "@/ai/client";
 import { createInitialGameState } from "@/game/create-initial-game-state";
 import { createEventHistoryEntry, runEventEngine } from "@/game/eventEngine";
 import { evaluateAction } from "@/game/ruleEngine";
@@ -17,13 +17,15 @@ import { getRelationshipStage } from "@/game/relationship";
 import { appendRecentStoryOpening, extractStoryOpening } from "@/game/contextBuilder";
 import { executeChatTransaction, getChatThreadId } from "@/game/chatEngine";
 import { incomingMessageFixtures } from "@/config/chat";
+import { executeSNSTransaction, SNSEngineError } from "@/game/snsEngine";
+import { appendSNSTrigger, createSNSDebugTrigger, deriveSNSTrigger } from "@/game/snsTriggerEngine";
 import { mockStories } from "@/mocks/story";
 import { createLocalStorageAdapter } from "@/storage/localStorageAdapter";
 import { createSaveRepository, SaveRepositoryError, type SaveRepository } from "@/storage/saveRepository";
 import type { CharacterBoundaryId, CharacterId } from "@/types/character";
-import type { EventEngineResult, EventHistoryEntry } from "@/types/event";
+import type { EventEngineResult, EventHistoryEntry, EventTag } from "@/types/event";
 import type { GameModeId, GameState, PlayerDraft, StatId } from "@/types/game";
-import type { ChoiceHistoryRecord, StoryFlagState, WeeklyStateSnapshot } from "@/types/history";
+import type { ChoiceHistoryRecord, OutcomeTag, StoryFlagState, WeeklyStateSnapshot } from "@/types/history";
 import type { MemoryRecord } from "@/types/memory";
 import type { GameSave, GameSaveData, SaveSummary } from "@/types/save";
 import type { StateChangeLogEntry } from "@/types/state";
@@ -31,6 +33,7 @@ import type { ActionReceipt, StoryChoice } from "@/types/ui";
 import type { StoryGenerationOutput } from "@/ai/schemas";
 import type { AIBadcaseRecord, TurnDomainState, TurnPlayerInput, TurnStatus, TurnTrace } from "@/types/turn";
 import type { ChatDomainState, ChatMessage, ChatThread, ChatTurnRecord, ChatTurnStatus, ChatTurnTrace, IncomingMessageTrigger } from "@/types/chat";
+import type { SNSDomainState, SNSGenerationStatus, SNSGenerationTrigger, SNSPost, SNSTurnTrace } from "@/types/sns";
 
 const initialDraft: PlayerDraft = {
   name: "",
@@ -81,6 +84,14 @@ const initialChatUI = {
   lastChatTrace: null as ChatTurnTrace | null,
 };
 
+const initialSNSUI = {
+  snsPosts: [] as SNSPost[],
+  snsTriggers: [] as SNSGenerationTrigger[],
+  snsStatus: "idle" as SNSGenerationStatus,
+  snsError: null as string | null,
+  lastSNSTrace: null as SNSTurnTrace | null,
+};
+
 let browserSaveRepository: SaveRepository | null = null;
 
 function getSaveRepository(): SaveRepository {
@@ -117,6 +128,11 @@ export interface GameStore {
   chatStatus: ChatTurnStatus;
   chatError: string | null;
   lastChatTrace: ChatTurnTrace | null;
+  snsPosts: SNSPost[];
+  snsTriggers: SNSGenerationTrigger[];
+  snsStatus: SNSGenerationStatus;
+  snsError: string | null;
+  lastSNSTrace: SNSTurnTrace | null;
   eventHistory: EventHistoryEntry[];
   selectedEventId: string | null;
   eventEngineResult: EventEngineResult | null;
@@ -147,6 +163,9 @@ export interface GameStore {
   markChatRead: (threadId: string) => void;
   enqueueIncomingFixture: (fixtureId: string) => void;
   processPendingIncoming: () => Promise<boolean>;
+  processPendingSNS: () => Promise<boolean>;
+  enqueueSNSFixture: (fixtureId: string) => void;
+  markSNSRead: () => void;
   setFreeAction: (text: string) => void;
   setAffection: (affection: number) => void;
   setDebugStat: (stat: StatId, value: number) => void;
@@ -183,6 +202,8 @@ function getSaveData(state: GameStore): GameSaveData | null {
     chatMessages: state.chatMessages,
     chatTurns: state.chatTurns,
     incomingMessageTriggers: state.incomingMessageTriggers,
+    snsPosts: state.snsPosts,
+    snsTriggers: state.snsTriggers,
     runtime: {
       playerConfirmed: state.playerConfirmed,
       characterConfirmed: state.characterConfirmed,
@@ -230,6 +251,11 @@ function saveToRuntime(save: GameSave): Partial<GameStore> {
     chatStatus: "idle",
     chatError: null,
     lastChatTrace: null,
+    snsPosts: save.snsPosts,
+    snsTriggers: save.snsTriggers,
+    snsStatus: "idle",
+    snsError: null,
+    lastSNSTrace: null,
     eventEngineResult: null,
     stateChangeLog: [],
     weeklyHistory: save.weeklyStateHistory,
@@ -320,6 +346,20 @@ export const useGameStore = create<GameStore>()((set, get) => {
       }, {
         persist: (result) => {
           const recentStoryOpenings = appendRecentStoryOpening(snapshot.recentStoryOpenings, result.story.story);
+          const sourceEvent = result.trace.storyContext.context.event;
+          const snsTrigger = deriveSNSTrigger({
+            gameId: result.gameState.gameId,
+            week: result.gameState.week,
+            sourceTurnId: result.turnId,
+            sourceEventId: sourceEvent?.id,
+            sourceCategory: sourceEvent?.category ?? "daily",
+            sourceTags: (sourceEvent?.tags ?? []) as EventTag[],
+            publicTitle: sourceEvent?.title ?? "公开行程动态",
+            publicSummary: sourceEvent?.description ?? "公开行程中出现了新的讨论焦点。",
+            outcomeTags: result.trace.settlementProposal.acceptedOutcomeTags,
+            beforeState: result.trace.beforeState,
+            afterState: result.trace.afterState,
+          });
           const patch: Partial<GameStore> = {
             gameState: result.gameState,
             eventHistory: result.eventHistory,
@@ -341,6 +381,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
             },
             freeAction: "",
+            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
           };
           const data = getSaveData({ ...snapshot, ...patch } as GameStore);
           if (!data) throw new SaveRepositoryError("invalid_schema", "Turn produced no saveable game state.");
@@ -349,6 +390,20 @@ export const useGameStore = create<GameStore>()((set, get) => {
         commit: (result, persisted) => {
           const saved = persisted as GameSave;
           const recentStoryOpenings = appendRecentStoryOpening(snapshot.recentStoryOpenings, result.story.story);
+          const sourceEvent = result.trace.storyContext.context.event;
+          const snsTrigger = deriveSNSTrigger({
+            gameId: result.gameState.gameId,
+            week: result.gameState.week,
+            sourceTurnId: result.turnId,
+            sourceEventId: sourceEvent?.id,
+            sourceCategory: sourceEvent?.category ?? "daily",
+            sourceTags: (sourceEvent?.tags ?? []) as EventTag[],
+            publicTitle: sourceEvent?.title ?? "公开行程动态",
+            publicSummary: sourceEvent?.description ?? "公开行程中出现了新的讨论焦点。",
+            outcomeTags: result.trace.settlementProposal.acceptedOutcomeTags,
+            beforeState: result.trace.beforeState,
+            afterState: result.trace.afterState,
+          });
           const rejectedSuggestions = [
             ...result.trace.settlementProposal.rejectedEffects.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
             ...result.trace.settlementProposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
@@ -386,6 +441,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               response: "本回合已通过规则检查、AI 生成和 State Engine 正式结算。",
             },
             freeAction: "",
+            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
             lastTurnTrace: result.trace,
             aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
               ? [...snapshot.aiBadcases, rejectionBadcase]
@@ -463,6 +519,15 @@ export const useGameStore = create<GameStore>()((set, get) => {
           const incomingMessageTriggers = input.kind === "incoming"
             ? snapshot.incomingMessageTriggers.map((trigger) => trigger.id === input.trigger.id ? { ...trigger, status: "delivered" as const } : trigger)
             : snapshot.incomingMessageTriggers;
+          const snsTrigger = input.kind === "player_message" && result.trace.proposal.acceptedOutcomeTags.includes("major_exposure")
+            ? deriveSNSTrigger({
+                gameId: result.gameState.gameId, week: result.gameState.week, sourceTurnId: result.turnId,
+                sourceEventId: `chat:${result.trace.context.context.threadId}`, sourceCategory: "relationship",
+                sourceTags: ["sns", "privacy", "high-risk"], publicTitle: "私人互动内容外泄",
+                publicSummary: "一段原本非公开的互动被结构化事件结果标记为已经外泄。",
+                outcomeTags: result.trace.proposal.acceptedOutcomeTags as OutcomeTag[],
+                beforeState: result.trace.beforeState, afterState: result.trace.afterState,
+              }) : null;
           const patch: Partial<GameStore> = {
             gameState: result.gameState,
             eventHistory: result.eventHistory,
@@ -477,6 +542,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
             incomingMessageTriggers,
             stateChangeLog: result.stateChangeLog ? [...snapshot.stateChangeLog, result.stateChangeLog] : snapshot.stateChangeLog,
             chatInput: input.kind === "player_message" ? "" : snapshot.chatInput,
+            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
           };
           const data = getSaveData({ ...snapshot, ...patch } as GameStore);
           if (!data) throw new SaveRepositoryError("invalid_schema", "Chat turn produced no saveable state.");
@@ -487,6 +553,15 @@ export const useGameStore = create<GameStore>()((set, get) => {
           const incomingMessageTriggers = input.kind === "incoming"
             ? snapshot.incomingMessageTriggers.map((trigger) => trigger.id === input.trigger.id ? { ...trigger, status: "delivered" as const } : trigger)
             : snapshot.incomingMessageTriggers;
+          const snsTrigger = input.kind === "player_message" && result.trace.proposal.acceptedOutcomeTags.includes("major_exposure")
+            ? deriveSNSTrigger({
+                gameId: result.gameState.gameId, week: result.gameState.week, sourceTurnId: result.turnId,
+                sourceEventId: `chat:${result.trace.context.context.threadId}`, sourceCategory: "relationship",
+                sourceTags: ["sns", "privacy", "high-risk"], publicTitle: "私人互动内容外泄",
+                publicSummary: "一段原本非公开的互动被结构化事件结果标记为已经外泄。",
+                outcomeTags: result.trace.proposal.acceptedOutcomeTags as OutcomeTag[],
+                beforeState: result.trace.beforeState, afterState: result.trace.afterState,
+              }) : null;
           const rejectedSuggestions = [
             ...result.trace.proposal.effects.rejected.map(({ stat, magnitude, rejectionReason }) => `${stat}:${magnitude}:${rejectionReason}`),
             ...result.trace.proposal.rejectedChoiceTags.map((tag) => `choiceTag:${tag}`),
@@ -519,6 +594,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
             chatStatus: "completed",
             chatError: null,
             lastChatTrace: result.trace,
+            snsTriggers: appendSNSTrigger(snapshot.snsTriggers, snsTrigger),
             aiBadcases: process.env.NODE_ENV === "development" && rejectionBadcase
               ? [...snapshot.aiBadcases, rejectionBadcase]
               : snapshot.aiBadcases,
@@ -550,6 +626,76 @@ export const useGameStore = create<GameStore>()((set, get) => {
     }
   };
 
+  const runSNSTrigger = async (snapshot: GameStore, trigger: SNSGenerationTrigger): Promise<boolean> => {
+    if (!snapshot.gameState) return false;
+    const domain: SNSDomainState = {
+      gameState: snapshot.gameState,
+      eventHistory: snapshot.eventHistory,
+      choiceHistory: snapshot.choiceHistory,
+      weeklyHistory: snapshot.weeklyHistory,
+      storyFlags: snapshot.storyFlags,
+      memories: snapshot.memories,
+      processedSettlementIds: snapshot.processedSettlementIds,
+      snsPosts: snapshot.snsPosts,
+      snsTriggers: snapshot.snsTriggers,
+    };
+    set({ snsStatus: "generating", snsError: null });
+    try {
+      await executeSNSTransaction(domain, trigger, {
+        generateSNS: generateSNSWithServer,
+        onStatus: (snsStatus) => set({ snsStatus }),
+      }, {
+        persist: (result) => {
+          const patch: Partial<GameStore> = {
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            snsPosts: result.snsPosts,
+            snsTriggers: result.snsTriggers,
+            stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
+          };
+          const data = getSaveData({ ...snapshot, ...patch } as GameStore);
+          if (!data) throw new SaveRepositoryError("invalid_schema", "SNS publication produced no saveable state.");
+          return writeSaveData(data, snapshot);
+        },
+        commit: (result, persisted) => {
+          const saved = persisted as GameSave;
+          set({
+            gameState: result.gameState,
+            eventHistory: result.eventHistory,
+            weeklyHistory: result.weeklyHistory,
+            storyFlags: result.storyFlags,
+            memories: result.memories,
+            processedSettlementIds: result.processedSettlementIds,
+            snsPosts: result.snsPosts,
+            snsTriggers: result.snsTriggers,
+            stateChangeLog: [...snapshot.stateChangeLog, result.stateChangeLog],
+            snsStatus: "completed",
+            snsError: null,
+            lastSNSTrace: result.trace,
+            activeSaveId: saved.saveId,
+            activeSaveCreatedAt: saved.createdAt,
+            activeSaveUpdatedAt: saved.updatedAt,
+            saveSummaries: getSaveRepository().listSaves(),
+            saveError: null,
+          });
+        },
+      });
+      return true;
+    } catch (error) {
+      set({
+        snsStatus: "error",
+        snsError: error instanceof SNSEngineError && error.code === "duplicate_trigger"
+          ? "这条舆论触发已经处理。"
+          : "SNS 内容生成失败，请重试。",
+      });
+      return false;
+    }
+  };
+
   return {
       draft: { ...initialDraft },
       gameState: null,
@@ -565,6 +711,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
       ...initialStoryUI,
       ...initialEventUI,
       ...initialChatUI,
+      ...initialSNSUI,
       patchDraft: (patch) =>
         set((state) => ({
           draft: { ...state.draft, ...patch },
@@ -575,6 +722,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialStoryUI,
           ...initialEventUI,
           ...initialChatUI,
+          ...initialSNSUI,
         })),
       confirmPlayer: (draft) => saveAfter(() => {
         set({
@@ -586,6 +734,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialStoryUI,
           ...initialEventUI,
           ...initialChatUI,
+          ...initialSNSUI,
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -601,6 +750,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialStoryUI,
           ...initialEventUI,
           ...initialChatUI,
+          ...initialSNSUI,
         })),
       confirmCharacter: () => {
         const { draft, gameState } = get();
@@ -733,6 +883,25 @@ export const useGameStore = create<GameStore>()((set, get) => {
         const threadId = getChatThreadId(state.gameState.maleLead);
         const trigger = state.incomingMessageTriggers.find((item) => item.threadId === threadId && item.status === "pending");
         return trigger ? runChatTurn(state, { kind: "incoming", trigger }) : false;
+      },
+      processPendingSNS: async () => {
+        const state = get();
+        if (!state.gameState || ["generating", "validating", "settling"].includes(state.snsStatus)) return false;
+        const trigger = state.snsTriggers.find(({ status }) => status === "pending");
+        return trigger ? runSNSTrigger(state, trigger) : false;
+      },
+      enqueueSNSFixture: (fixtureId) => {
+        if (process.env.NODE_ENV !== "development") return;
+        const state = get();
+        if (!state.gameState) return;
+        const trigger = createSNSDebugTrigger(fixtureId, state.gameState);
+        if (!trigger) return;
+        saveAfter(() => set({ snsTriggers: appendSNSTrigger(state.snsTriggers, trigger) }));
+      },
+      markSNSRead: () => {
+        const state = get();
+        if (!state.snsPosts.some(({ read }) => !read)) return;
+        saveAfter(() => set({ snsPosts: state.snsPosts.map((post) => ({ ...post, read: true })) }));
       },
       setFreeAction: (freeAction) => set({ freeAction }),
       setAffection: (affection) =>
@@ -942,6 +1111,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
               ...initialStoryUI,
               ...initialEventUI,
               ...initialChatUI,
+              ...initialSNSUI,
               activeSaveId: null,
               activeSaveCreatedAt: null,
               activeSaveUpdatedAt: null,
@@ -970,6 +1140,7 @@ export const useGameStore = create<GameStore>()((set, get) => {
           ...initialStoryUI,
           ...initialEventUI,
           ...initialChatUI,
+          ...initialSNSUI,
           activeSaveId: null,
           activeSaveCreatedAt: null,
           activeSaveUpdatedAt: null,
@@ -998,6 +1169,8 @@ export const useGameStore = create<GameStore>()((set, get) => {
             chatMessages: [],
             chatTurns: [],
             incomingMessageTriggers: [],
+            snsPosts: [],
+            snsTriggers: [],
             runtime: {
               playerConfirmed: true,
               characterConfirmed: false,

@@ -1,6 +1,7 @@
 import type { AIProviderResult } from "./provider";
 import type { ActionInterpretationInput, ActionInterpretationOutput, StoryGenerationInput, StoryGenerationOutput } from "./schemas";
 import type { ChatGenerationInput, ChatGenerationOutput } from "./chatSchemas";
+import type { SNSGenerationInput, SNSGenerationOutput } from "./snsSchemas";
 
 export interface PublicAIStatus {
   mode: "mock" | "qwen";
@@ -8,6 +9,7 @@ export interface PublicAIStatus {
   actionModel: string;
   storyModel: string;
   chatModel: string;
+  snsModel: string;
   configured: boolean;
   enableThinking: boolean;
   missing: Array<"apiKey" | "baseUrl">;
@@ -74,4 +76,8 @@ export async function generateStoryWithServer(input: StoryGenerationInput): Prom
 
 export async function generateChatWithServer(input: ChatGenerationInput): Promise<AIProviderResult<ChatGenerationOutput>> {
   return readResponse(await fetch("/api/ai/generate-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }));
+}
+
+export async function generateSNSWithServer(input: SNSGenerationInput): Promise<AIProviderResult<SNSGenerationOutput>> {
+  return readResponse(await fetch("/api/ai/generate-sns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) }));
 }
