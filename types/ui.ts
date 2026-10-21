@@ -1,7 +1,14 @@
 import type { StateEffects } from "./state";
+import type { ChoiceTag, StructuredSettlementOutcome } from "./history";
 
 /** UI-only structures. Domain types live in the other files under /types. */
-export interface StoryChoice { id: "A" | "B" | "C"; text: string; effects: StateEffects }
+export interface StoryChoice {
+  id: "A" | "B" | "C";
+  text: string;
+  effects: StateEffects;
+  tags: ChoiceTag[];
+  outcome?: StructuredSettlementOutcome;
+}
 export interface MockStory {
   id: string;
   title: string;

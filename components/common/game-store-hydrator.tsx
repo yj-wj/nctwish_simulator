@@ -5,7 +5,16 @@ import { useGameStore } from "@/store/game-store";
 
 export function GameStoreHydrator() {
   useEffect(() => {
-    void useGameStore.persist.rehydrate();
+    let active = true;
+    const hydrate = async () => {
+      try {
+        await useGameStore.persist.rehydrate();
+      } finally {
+        if (active) useGameStore.getState().setHydrated(true);
+      }
+    };
+    void hydrate();
+    return () => { active = false; };
   }, []);
 
   return null;

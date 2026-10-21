@@ -7,8 +7,9 @@ import {
   getEndingDerivedConditions,
 } from "../game/endingEngine.ts";
 import { getMatchedTriggers } from "../game/ruleEngine.ts";
-import type { EndingContext, EndingHistoryMetrics, EndingStoryFlags } from "../types/ending.ts";
+import type { EndingContext, EndingHistoryFacts } from "../types/ending.ts";
 import type { GameState, GameStats } from "../types/game.ts";
+import type { HistoryMetrics, StoryFlagState } from "../types/history.ts";
 
 const baseStats: GameStats = {
   affection: 50,
@@ -34,12 +35,14 @@ function makeState(week = 12, stats: Partial<GameStats> = {}): GameState {
 }
 
 function makeContext(
-  historyMetrics: Partial<EndingHistoryMetrics> = {},
-  storyFlags: Partial<EndingStoryFlags> = {},
+  historyMetrics: Partial<HistoryMetrics> = {},
+  storyFlags: Partial<StoryFlagState> = {},
+  historyFacts: Partial<EndingHistoryFacts> = {},
 ): EndingContext {
   return {
     historyMetrics: { ...initialEndingContext.historyMetrics, ...historyMetrics },
     storyFlags: { ...initialEndingContext.storyFlags, ...storyFlags },
+    historyFacts: { ...initialEndingContext.historyFacts, ...historyFacts },
   };
 }
 
@@ -56,7 +59,7 @@ const heState = () => makeState(12, {
   money: 500,
 });
 const heContext = () => makeContext(
-  { selfGrowthEventCount: 2 },
+  { selfGrowthEventsInLast8Weeks: 2 },
   { relationshipConfirmed: true },
 );
 
@@ -76,7 +79,7 @@ test("HE appears when every numeric, history, derived and story condition matche
 
 test("HE does not appear when one key condition is missing", () => {
   assert.ok(!candidateIds(heState(), makeContext(
-    { selfGrowthEventCount: 1 },
+    { selfGrowthEventsInLast8Weeks: 1 },
     { relationshipConfirmed: true },
   )).includes("HE_SECRET_STABLE"));
 });
@@ -86,8 +89,7 @@ test("OE appears only with waiting choice and active separation pressure", () =>
   const complete = makeContext({}, {
     relationshipConfirmed: true,
     separationPressureActive: true,
-    waitOrMaintainRelationshipChoiceMade: true,
-  });
+  }, { waitOrMaintainRelationshipChoiceMade: true });
   assert.ok(candidateIds(state, complete).includes("OE_WAITING"));
   assert.ok(!candidateIds(state, makeContext({}, {
     relationshipConfirmed: true,
@@ -138,7 +140,7 @@ test("SE appears only with public reveal success and stable career conditions", 
 });
 
 test("derived conditions use GameState plus formal History and Story inputs", () => {
-  const context = makeContext({ selfGrowthEventCount: 2 }, { relationshipConfirmed: true });
+  const context = makeContext({ selfGrowthEventsInLast8Weeks: 2 }, { relationshipConfirmed: true });
   assert.deepEqual(getEndingDerivedConditions(makeState(12, {
     affection: 81,
     money: 500,
@@ -192,7 +194,7 @@ test("multiple satisfied endings are returned together without random selection"
     companyAlert: 60,
     careerPressure: 60,
   });
-  const context = makeContext({ selfGrowthEventCount: 2 }, {
+  const context = makeContext({ selfGrowthEventsInLast8Weeks: 2 }, {
     relationshipConfirmed: true,
     publicRevealEventTriggered: true,
     publicRevealSucceeded: true,

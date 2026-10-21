@@ -2,8 +2,7 @@ import {
   endingDefinitions,
   endingDerivedConditionConfig,
   endingProgressConfig,
-  initialEndingHistoryMetrics,
-  initialEndingStoryFlags,
+  initialEndingContext,
 } from "../config/endings.ts";
 import type {
   EndingCandidate,
@@ -28,8 +27,9 @@ function compare(current: number, operator: EndingConditionOperator, expected: n
 
 export function resolveEndingContext(context: EndingEvaluationContext = {}): EndingContext {
   return {
-    historyMetrics: { ...initialEndingHistoryMetrics, ...context.historyMetrics },
-    storyFlags: { ...initialEndingStoryFlags, ...context.storyFlags },
+    historyMetrics: { ...initialEndingContext.historyMetrics, ...context.historyMetrics },
+    storyFlags: { ...initialEndingContext.storyFlags, ...context.storyFlags },
+    historyFacts: { ...initialEndingContext.historyFacts, ...context.historyFacts },
   };
 }
 
@@ -43,15 +43,15 @@ export function getEndingDerivedConditions(
     playerLifeStable:
       gameState.stats.money >= endingDerivedConditionConfig.playerLifeStable.moneyMin &&
       gameState.stats.mood >= endingDerivedConditionConfig.playerLifeStable.moodMin &&
-      historyMetrics.selfGrowthEventCount >= endingDerivedConditionConfig.playerLifeStable.selfGrowthEventCountMin &&
-      !storyFlags.unresolvedFinancialCrisis,
+      historyMetrics.selfGrowthEventsInLast8Weeks >= endingDerivedConditionConfig.playerLifeStable.selfGrowthEventsInLast8WeeksMin &&
+      !resolved.historyFacts.unresolvedFinancialCrisis,
     stillInLove:
       gameState.stats.affection >= endingDerivedConditionConfig.stillInLove.affectionMin &&
       storyFlags.relationshipConfirmed &&
       !storyFlags.formalBreakup,
     maleLeadCareerStable:
       gameState.stats.careerPressure <= endingDerivedConditionConfig.maleLeadCareerStable.careerPressureMax &&
-      !storyFlags.unresolvedCareerBreakdownInLast4Weeks,
+      !resolved.historyFacts.unresolvedCareerBreakdownInLast4Weeks,
   };
 }
 
@@ -68,6 +68,8 @@ function matchesCondition(
       return compare(context.historyMetrics[condition.key], condition.operator, condition.value);
     case "storyFlag":
       return context.storyFlags[condition.key] === condition.expected;
+    case "historyFact":
+      return context.historyFacts[condition.key] === condition.expected;
     case "derived":
       return derivedConditions[condition.key] === condition.expected;
   }

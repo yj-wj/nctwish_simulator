@@ -1,4 +1,5 @@
 import type { CareerStage, GameModeId, RelationshipStageId, StatId } from "./game";
+import type { EventStatus, OutcomeTag, StoryFlagEffect } from "./history";
 import type { SpecialTriggerId, SpecialTriggerMatch } from "./rules";
 
 export type EventCategory =
@@ -87,9 +88,15 @@ export interface EventTemplate {
 }
 
 export interface EventHistoryEntry {
+  recordId: string;
   eventId: string;
   week: number;
   category: EventCategory;
+  eventTags: EventTag[];
+  outcomeTags: OutcomeTag[];
+  status: EventStatus;
+  settlementId?: string;
+  flagEffects: StoryFlagEffect[];
 }
 
 export type EventFilterReasonCode =

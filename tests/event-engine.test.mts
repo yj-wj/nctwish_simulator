@@ -144,7 +144,7 @@ test("week, career stage, game mode and explicit exclusions are enforced", () =>
   ]);
 });
 
-test("selection is seeded, history entries are minimal, and the engine never mutates GameState", () => {
+test("selection is seeded, extended history entries are structured, and the engine never mutates GameState", () => {
   const state = makeState({ affection: 60 });
   const before = structuredClone(state);
   const first = runEventEngine(state, { seed: "same-seed" });
@@ -153,9 +153,14 @@ test("selection is seeded, history entries are minimal, and the engine never mut
   assert.deepEqual(state, before);
   assert.ok(first.selectedEvent);
   assert.deepEqual(createEventHistoryEntry(first.selectedEvent.event, state), {
+    recordId: `event-test:1:${first.selectedEvent.event.id}:selection:0`,
     eventId: first.selectedEvent.event.id,
     week: 1,
     category: first.selectedEvent.event.category,
+    eventTags: first.selectedEvent.event.tags,
+    outcomeTags: [],
+    status: "selected",
+    flagEffects: [],
   });
   assert.deepEqual(getMatchedTriggers(state), first.matchedTriggers);
 });

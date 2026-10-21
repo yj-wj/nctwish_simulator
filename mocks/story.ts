@@ -32,9 +32,9 @@ export const mockStories: MockStory[] = [
     sourceLabel: "初遇 · 原文开局样例",
     subtitle: "有些故事，始于一句很轻的谢谢。",
     choices: [
-      { id: "A", text: "立刻离开，不给自己惹麻烦。", effects: mockChoiceEffects.A },
-      { id: "B", text: "小声再说一次谢谢，试图让他听见。", effects: mockChoiceEffects.B },
-      { id: "C", text: "假装镇定，继续完成工作，但偷偷记住他的名字。", effects: mockChoiceEffects.C },
+      { id: "A", text: "立刻离开，不给自己惹麻烦。", effects: mockChoiceEffects.A, tags: ["self_protection", "withdraw", "keep_distance"] },
+      { id: "B", text: "小声再说一次谢谢，试图让他听见。", effects: mockChoiceEffects.B, tags: ["maintain_relationship"] },
+      { id: "C", text: "假装镇定，继续完成工作，但偷偷记住他的名字。", effects: mockChoiceEffects.C, tags: ["career"] },
     ],
   },
   {
@@ -49,9 +49,9 @@ export const mockStories: MockStory[] = [
       "你看了一眼手里的热咖啡。天还没有亮，自己的事情也还没有做完。",
     ],
     choices: [
-      { id: "A", text: "整理好资料，确认没有遗漏。", effects: mockChoiceEffects.A },
-      { id: "B", text: "站到避风的位置，喝一口热咖啡。", effects: mockChoiceEffects.B },
-      { id: "C", text: "看看手机，确认自己接下来的安排。", effects: mockChoiceEffects.C },
+      { id: "A", text: "整理好资料，确认没有遗漏。", effects: mockChoiceEffects.A, tags: ["career"] },
+      { id: "B", text: "站到避风的位置，喝一口热咖啡。", effects: mockChoiceEffects.B, tags: ["self_growth"] },
+      { id: "C", text: "看看手机，确认自己接下来的安排。", effects: mockChoiceEffects.C, tags: ["independent_life"] },
     ],
   },
   {
@@ -66,9 +66,9 @@ export const mockStories: MockStory[] = [
       "你把手里的东西拿稳，留出一点时间，想想自己接下来要做什么。",
     ],
     choices: [
-      { id: "A", text: "列一下今天需要完成的事情。", effects: mockChoiceEffects.A },
-      { id: "B", text: "给自己留一点吃早餐的时间。", effects: mockChoiceEffects.B },
-      { id: "C", text: "收好手机，准备继续自己的安排。", effects: mockChoiceEffects.C },
+      { id: "A", text: "列一下今天需要完成的事情。", effects: mockChoiceEffects.A, tags: ["career", "self_growth"] },
+      { id: "B", text: "给自己留一点吃早餐的时间。", effects: mockChoiceEffects.B, tags: ["self_growth", "independent_life"] },
+      { id: "C", text: "收好手机，准备继续自己的安排。", effects: mockChoiceEffects.C, tags: ["independent_life"] },
     ],
   },
 ];

@@ -208,6 +208,16 @@ export function runEventEngine(
 export function createEventHistoryEntry(
   event: EventTemplate,
   gameState: GameState,
+  sequence = 0,
 ): EventHistoryEntry {
-  return { eventId: event.id, week: gameState.week, category: event.category };
+  return {
+    recordId: `${gameState.gameId}:${gameState.week}:${event.id}:selection:${sequence}`,
+    eventId: event.id,
+    week: gameState.week,
+    category: event.category,
+    eventTags: [...event.tags],
+    outcomeTags: [],
+    status: "selected",
+    flagEffects: [],
+  };
 }

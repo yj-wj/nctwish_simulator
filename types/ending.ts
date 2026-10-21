@@ -1,4 +1,5 @@
 import type { StatId } from "./game";
+import type { HistoryMetrics, StoryFlagId, StoryFlagState } from "./history";
 
 export type EndingType = "HE" | "OE" | "BE" | "SE";
 
@@ -9,39 +10,18 @@ export type EndingId =
   | "BE_PLAYER_LEAVES"
   | "SE_PUBLIC_RELATIONSHIP";
 
-export interface EndingHistoryMetrics {
-  selfGrowthEventCount: number;
-  selfProtectionChoiceCount: number;
-  unstableResponseCount: number;
-  lowMoodWeeksInLast5: number;
-}
-
-export type EndingHistoryMetricId = keyof EndingHistoryMetrics;
-
-export interface EndingStoryFlags {
-  relationshipConfirmed: boolean;
-  formalBreakup: boolean;
-  majorExposureOccurred: boolean;
-  publicOpinionOutOfControl: boolean;
-  publicRevealEventTriggered: boolean;
-  publicRevealSucceeded: boolean;
-  unresolvedMajorCrisis: boolean;
-  separationPressureActive: boolean;
-  playerChoseLeave: boolean;
-  playerChoseSeparation: boolean;
-  forcedSeparation: boolean;
-  relationshipFailedDuringExposure: boolean;
-  playerCareerStable: boolean;
+export interface EndingHistoryFacts {
   unresolvedFinancialCrisis: boolean;
   waitOrMaintainRelationshipChoiceMade: boolean;
   unresolvedCareerBreakdownInLast4Weeks: boolean;
 }
 
-export type EndingStoryFlagId = keyof EndingStoryFlags;
+export type EndingHistoryFactId = keyof EndingHistoryFacts;
 
 export interface EndingContext {
-  historyMetrics: EndingHistoryMetrics;
-  storyFlags: EndingStoryFlags;
+  historyMetrics: HistoryMetrics;
+  storyFlags: StoryFlagState;
+  historyFacts: EndingHistoryFacts;
 }
 
 export type EndingDerivedConditionId =
@@ -68,7 +48,7 @@ export interface EndingStatCondition {
 
 export interface EndingHistoryCondition {
   source: "history";
-  key: EndingHistoryMetricId;
+  key: keyof HistoryMetrics;
   operator: EndingConditionOperator;
   value: number;
   sourceText: string;
@@ -76,7 +56,14 @@ export interface EndingHistoryCondition {
 
 export interface EndingStoryFlagCondition {
   source: "storyFlag";
-  key: EndingStoryFlagId;
+  key: StoryFlagId;
+  expected: boolean;
+  sourceText: string;
+}
+
+export interface EndingHistoryFactCondition {
+  source: "historyFact";
+  key: EndingHistoryFactId;
   expected: boolean;
   sourceText: string;
 }
@@ -92,6 +79,7 @@ export type EndingCondition =
   | EndingStatCondition
   | EndingHistoryCondition
   | EndingStoryFlagCondition
+  | EndingHistoryFactCondition
   | EndingDerivedCondition;
 
 export interface EndingDefinition {
@@ -104,8 +92,9 @@ export interface EndingDefinition {
 }
 
 export interface EndingEvaluationContext {
-  historyMetrics?: Partial<EndingHistoryMetrics>;
-  storyFlags?: Partial<EndingStoryFlags>;
+  historyMetrics?: Partial<HistoryMetrics>;
+  storyFlags?: Partial<StoryFlagState>;
+  historyFacts?: Partial<EndingHistoryFacts>;
 }
 
 export interface EndingCandidate {

@@ -9,6 +9,7 @@ import { useGameStore } from "@/store/game-store";
 import type { EventCategory } from "@/types/event";
 import type { GameState, StatId } from "@/types/game";
 import { EndingEngineDebug } from "./ending-engine-debug";
+import { MemoryDebug } from "./memory-debug";
 import { StateEngineDebug } from "./state-engine-debug";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
@@ -58,9 +59,9 @@ export function RelationshipDebug() {
   const selected = storedResult?.selectedEvent?.event
     ?? (selectedEventId ? getEventTemplate(selectedEventId) : undefined);
 
-  return <section className="relationship-debug" aria-label="Phase 3C.1 开发测试">
+  return <section className="relationship-debug" aria-label="Phase 4B 开发测试">
     <header className="debug-summary">
-      <div><strong>Phase 3C.1 Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
+      <div><strong>Phase 4B Debug</strong><span>Current State · 第 {gameState.week} 周 · {relationshipRule.stage.name} · {gameState.gameMode}</span></div>
       <span>Interaction · {relationshipRule.allowedInteractionLevel}</span>
       <span>matchedTriggers · {matchedTriggers.map(({ id }) => id).join(", ") || "none"}</span>
     </header>
@@ -88,9 +89,10 @@ export function RelationshipDebug() {
       {result?.filteredEvents.map(({ event, reasons }) => <p key={event.id}><span>{event.title}</span><small>{reasons.map(({ code }) => code).join(", ")}</small></p>)}
     </div></details>
     <details className="debug-details"><summary>Event History</summary><div className="debug-event-list">
-      {eventHistory.length ? eventHistory.map((entry, index) => <p key={`${entry.eventId}-${index}`}><span>第 {entry.week} 周 · {entry.eventId}</span><small>{categoryLabels[entry.category]}</small></p>) : <p><span>尚无事件记录</span></p>}
+      {eventHistory.length ? eventHistory.map((entry) => <p key={entry.recordId}><span>第 {entry.week} 周 · {entry.eventId}</span><small>{categoryLabels[entry.category]} · {entry.status} · outcomes: {entry.outcomeTags.join(", ") || "none"}</small></p>) : <p><span>尚无事件记录</span></p>}
     </div></details>
     <StateEngineDebug />
     <EndingEngineDebug />
+    <MemoryDebug />
   </section>;
 }
