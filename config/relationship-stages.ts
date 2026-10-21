@@ -1,0 +1,68 @@
+import type { RelationshipStage } from "@/types/game";
+
+export const relationshipStageConfig: RelationshipStage[] = [
+  {
+    id: "strangers",
+    name: "陌生人",
+    minAffection: 0,
+    maxAffection: 15,
+    allowedInteractions: ["礼貌交流", "短暂帮助", "工作接触"],
+    prohibitedInteractions: ["男主主动深情告白", "跳级互动"],
+    typicalInteractions: ["记住你", "多看一眼", "语气缓和"],
+  },
+  {
+    id: "noticed",
+    name: "有印象",
+    minAffection: 16,
+    maxAffection: 30,
+    allowedInteractions: ["记得玩家的名字、习惯与出现地点", "简单关心"],
+    prohibitedInteractions: ["越界肢体亲密", "跳级互动"],
+    typicalInteractions: ["记住名字或习惯后给予简单关心"],
+  },
+  {
+    id: "interested",
+    name: "产生兴趣",
+    minAffection: 31,
+    maxAffection: 50,
+    allowedInteractions: ["主动制造短暂对话", "私下讯息", "工作外偶遇"],
+    prohibitedInteractions: ["绕过公司和职业边界", "跳过暧昧直接确定关系"],
+    typicalInteractions: ["短暂主动对话", "私下讯息", "工作外偶遇"],
+  },
+  {
+    id: "ambiguous",
+    name: "暧昧期",
+    minAffection: 51,
+    maxAffection: 65,
+    allowedInteractions: ["明显拉扯", "吃醋", "试探", "深夜联系"],
+    prohibitedInteractions: ["不克制的亲密行为", "跳级互动"],
+    typicalInteractions: ["拉扯与试探", "公司警觉度开始上升"],
+  },
+  {
+    id: "committed",
+    name: "确认关系",
+    minAffection: 66,
+    maxAffection: 80,
+    allowedInteractions: ["双方明确心意后的关系互动"],
+    prohibitedInteractions: ["把确认关系等同于可以公开", "无视保密与职业边界"],
+    typicalInteractions: ["恋情保密度成为核心压力", "事业压力影响相处频率"],
+  },
+  {
+    id: "inLove",
+    name: "热恋期",
+    minAffection: 81,
+    maxAffection: 90,
+    allowedInteractions: ["热恋阶段甜度提升的互动"],
+    prohibitedInteractions: ["把热恋解释为免除现实风险"],
+    typicalInteractions: ["私生、狗仔、站姐与韩网论坛构成威胁", "危机概率上升"],
+  },
+  {
+    id: "trial",
+    name: "考验期",
+    minAffection: 91,
+    maxAffection: 100,
+    allowedInteractions: ["围绕爱情、事业、公开、分手、等待与自我成长作出选择"],
+    prohibitedInteractions: ["把考验期直接等同于某个结局"],
+    typicalInteractions: ["进入结局分歧"],
+  },
+];
+

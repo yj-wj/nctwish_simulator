@@ -1,17 +1,7 @@
-import type { MockStory, StatPreview } from "@/types/ui";
+import type { MockStory } from "@/types/ui";
 
 // Fixed opening sample from the source document. Never used to settle actions.
 export const previewContext = { week: 1, scene: "首尔汝矣岛电视台后门", relationship: "陌生人", careerStage: "回归期" } as const;
-export const previewStats: StatPreview[] = [
-  { id: "affection", label: "好感度", value: 8 },
-  { id: "popularity", label: "人气值", value: 0 },
-  { id: "mood", label: "心情值", value: 72 },
-  { id: "money", label: "金钱", value: 2300 },
-  { id: "secrecy", label: "恋情保密度", value: 100 },
-  { id: "companyAlert", label: "公司警觉度", value: 18 },
-  { id: "careerPressure", label: "事业压力", value: 67 },
-];
-
 export const opening = {
   title: "天亮之前，短暂交集",
   time: "04:27 AM",

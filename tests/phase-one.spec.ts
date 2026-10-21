@@ -31,7 +31,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByText("第 1 周", { exact: true })).toBeVisible();
   await expect(page.locator(".context-details")).toContainText("前田陆（Riku）");
   await expect(page.locator(".relationship-pill")).toHaveText("陌生人");
-  const stats = page.getByRole("region", { name: "七项状态（固定样例）" });
+  const stats = page.getByRole("region", { name: "七项核心状态" });
   await expect(stats.locator(".stat-item")).toHaveCount(7);
   for (const label of ["好感度", "人气值", "心情值", "金钱", "恋情保密度", "公司警觉度", "事业压力"]) {
     await expect(stats.getByText(label, { exact: true })).toBeVisible();
@@ -100,10 +100,11 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByRole("status")).toContainText("自由行动已收到");
   expect(await stats.innerText()).toEqual(initialStats);
   await page.reload();
-  await expect(page).toHaveURL(/\/create$/);
-  await enterGame(page);
-  await expect(page.getByRole("heading", { name: "天亮之前，短暂交集", exact: true })).toBeVisible();
-  await expect(page.getByLabel("上一轮选择")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/game$/);
+  await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
+  await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
+  await expect(page.locator(".context-details")).toContainText("前田陆（Riku）");
+  expect(await stats.innerText()).toEqual(initialStats);
   expect(errors).toEqual([]);
 });
 
@@ -143,6 +144,13 @@ test("输入校验、自定义身份、全部选择、返回修改", async ({ pa
   await page.getByRole("button", { name: "确定，查看角色卡" }).click();
   await expect(page.locator(".pairing-summary")).toContainText("修改后");
   await expect(page.locator(".pairing-summary")).toContainText("日常治愈向");
+  await page.getByRole("button", { name: "进入剧情" }).click();
+  await page.getByRole("navigation", { name: "游戏导航" }).getByRole("link", { name: "档案", exact: true }).click();
+  await expect(page.locator(".archive-details")).toContainText("自定义身份");
+  await expect(page.locator(".archive-details")).toContainText("藤永咲哉");
+  await expect(page.locator(".archive-details")).toContainText("曾经脱粉，重新遇见后心情复杂");
+  await expect(page.locator(".archive-details")).toContainText("日常治愈向");
+  await expect(page.locator(".archive-details")).toContainText("在首尔经营一家书店，因送书而相遇。");
 });
 
 test("未创建时直接访问后续路由安全返回创建页", async ({ page }) => {

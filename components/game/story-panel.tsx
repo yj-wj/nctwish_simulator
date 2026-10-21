@@ -3,24 +3,25 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, CornerDownLeft, Feather, MapPin } from "lucide-react";
-import { mockStories, previewContext } from "@/mocks/story";
-import { getCharacter } from "@/mocks/characters";
-import { useUIStore } from "@/store/ui-store";
+import { mockStories } from "@/mocks/story";
+import { getCharacter } from "@/config/characters";
+import { useGameStore } from "@/store/game-store";
 import { CharacterVisual } from "@/components/character/character-visual";
 import { NightGarden } from "@/components/common/night-garden";
 
 export function StoryPanel() {
-  const draft = useUIStore((state) => state.draft);
-  const receipt = useUIStore((state) => state.receipt);
-  const record = useUIStore((state) => state.recordAction);
-  const freeAction = useUIStore((state) => state.freeAction);
-  const setFreeAction = useUIStore((state) => state.setFreeAction);
-  const storyIndex = useUIStore((state) => state.storyIndex);
-  const previousChoice = useUIStore((state) => state.previousChoice);
-  const advance = useUIStore((state) => state.advanceMockStory);
+  const draft = useGameStore((state) => state.draft);
+  const gameState = useGameStore((state) => state.gameState);
+  const receipt = useGameStore((state) => state.receipt);
+  const record = useGameStore((state) => state.recordAction);
+  const freeAction = useGameStore((state) => state.freeAction);
+  const setFreeAction = useGameStore((state) => state.setFreeAction);
+  const storyIndex = useGameStore((state) => state.storyIndex);
+  const previousChoice = useGameStore((state) => state.previousChoice);
+  const advance = useGameStore((state) => state.advanceMockStory);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [error, setError] = useState("");
-  const character = getCharacter(draft.maleLead);
+  const character = getCharacter(gameState?.maleLead ?? draft.maleLeadId);
   const story = mockStories[storyIndex];
 
   useEffect(() => {
@@ -50,8 +51,8 @@ export function StoryPanel() {
       <div role="status" aria-live="polite">{receipt && <div className="action-receipt"><Check size={18} /><div><strong>{receipt.response}</strong><p>你的行动：{receipt.label}</p></div></div>}</div>
     </section>
   </article>
-    <aside className="story-sidebar"><section className="paper-panel companion-card"><div className="aside-heading"><span>这次相遇的人</span><span>01</span></div><CharacterVisual character={character} /><div className="companion-copy"><p className="eyebrow">{character.stageName.toUpperCase()}</p><h2>{character.name}</h2><p>{character.subtitle}</p><Link href="/game/characters">查看人物档案 <ArrowUpRight size={15} /></Link></div></section>
-      <section className="scene-card"><NightGarden compact /><div><p className="eyebrow">SOMEWHERE IN SEOUL</p><p><MapPin size={14} />{previewContext.scene}</p></div></section>
+    <aside className="story-sidebar"><section className="paper-panel companion-card"><div className="aside-heading"><span>这次相遇的人</span><span>01</span></div><CharacterVisual character={character} /><div className="companion-copy"><p className="eyebrow">{character.displayName.toUpperCase()}</p><h2>{character.name}</h2><p>{character.subtitle}</p><Link href="/game/characters">查看人物档案 <ArrowUpRight size={15} /></Link></div></section>
+      <section className="scene-card"><NightGarden compact /><div><p className="eyebrow">SOMEWHERE IN SEOUL</p><p><MapPin size={14} />{gameState?.currentScene ?? "首尔汝矣岛电视台后门"}</p></div></section>
       <p className="margin-note">“你仍然有自己的生活，<br />他也仍然属于舞台。”<span>GARDEN · 故事的另一面</span></p>
       <p className="reference-note">开局保留原文模板，后两段为固定 UI 样例；暂未根据选择、身份或剧情节奏生成不同分支。</p>
     </aside>
