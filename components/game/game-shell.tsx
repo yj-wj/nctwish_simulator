@@ -18,7 +18,7 @@ export function GameShell({ children }: { children: ReactNode }) {
   const relationshipStage = getRelationshipStage(gameState.stats.affection);
   return <RouteGuard stage="game"><SiteHeader /><main id="main-content" className="game-shell">
     <div className="game-context"><div className="week-label"><CalendarDays size={17} /><strong>第 {gameState.week} 周</strong><span>CHAPTER 01</span></div><div className="context-details"><span><MapPin size={15} />{gameState.currentScene}</span><span>{character.name}（{character.displayName}）</span><span className="relationship-pill"><Heart size={13} />{relationshipStage.name}</span></div></div>
-    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 2 · 状态栏来自统一 GameState；剧情选择仍为固定 Mock，不结算属性或周数。</span></div>
+    <StatStrip stats={gameState.stats} /><div className="preview-banner"><span className="status-dot" /><span>Phase 3B · Event Engine 选择下一条 Mock 事件；剧情正文、属性与周数仍不结算。</span></div>
     <RelationshipDebug />
     {children}
   </main><BottomNav /></RouteGuard>;

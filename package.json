@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test:relationship": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/relationship.test.mts",
     "test:rules": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/rule-engine.test.mts",
-    "test:unit": "npm run test:relationship && npm run test:rules",
+    "test:events": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test --test-isolation=none tests/event-engine.test.mts",
+    "test:unit": "npm run test:relationship && npm run test:rules && npm run test:events",
     "test:e2e": "playwright test"
   },
   "dependencies": {

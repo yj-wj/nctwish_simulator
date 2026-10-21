@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, Check, CornerDownLeft, Feather, MapPin } from "lucide-react";
 import { mockStories } from "@/mocks/story";
 import { getCharacter } from "@/config/characters";
+import { getEventTemplate } from "@/config/event-pool";
 import { useGameStore } from "@/store/game-store";
 import { CharacterVisual } from "@/components/character/character-visual";
 import { NightGarden } from "@/components/common/night-garden";
@@ -19,10 +20,12 @@ export function StoryPanel() {
   const storyIndex = useGameStore((state) => state.storyIndex);
   const previousChoice = useGameStore((state) => state.previousChoice);
   const advance = useGameStore((state) => state.advanceMockStory);
+  const selectedEventId = useGameStore((state) => state.selectedEventId);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [error, setError] = useState("");
   const character = getCharacter(gameState?.maleLead ?? draft.maleLeadId);
   const story = mockStories[storyIndex];
+  const selectedEvent = selectedEventId ? getEventTemplate(selectedEventId) : undefined;
 
   useEffect(() => {
     if (previousChoice) {
@@ -42,6 +45,7 @@ export function StoryPanel() {
     <h1 ref={titleRef} tabIndex={-1}>{story.title}</h1><p className="story-deck">{story.subtitle}</p>
     <p className="reference-note">Mock 剧情 {storyIndex + 1} / {mockStories.length} · A/B/C 均切换到下一段，末段后循环回到开局。</p>
     {previousChoice && <p className="reference-note" aria-label="上一轮选择">上一轮选择：{previousChoice.id} · {previousChoice.text}</p>}
+    {selectedEvent && <section className="mock-event-card" aria-label="Event Engine 选中的 Mock 事件"><span>{selectedEvent.category}</span><div><small>EVENT ENGINE · MOCK</small><h2>{selectedEvent.title}</h2><p>{selectedEvent.description}</p></div></section>}
     <div className="story-divider"><span>✳</span></div>
     <div className="story-body">{story.paragraphs.map((paragraph, index) => <p key={index} className={paragraph.startsWith("“") ? "dialogue" : ""}>{paragraph}</p>)}</div>
     <section className="actions-section" aria-labelledby="action-title"><div className="actions-title"><h2 id="action-title">此刻，你会怎么做？</h2><span>YOUR CHOICE</span></div>

@@ -53,6 +53,8 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
     await expect(page.getByRole("heading", { name: title, exact: true })).toBeFocused();
     expect(await page.locator(".story-body").innerText()).not.toEqual(previousBody);
     await expect(page.getByLabel("上一轮选择")).toHaveText(`上一轮选择：${id} · ${previousText}`);
+    await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toBeVisible();
+    await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toContainText("EVENT ENGINE · MOCK");
     await expect(page.locator(".story-choice")).toHaveCount(3);
     await expect(page.getByLabel("D · 自由行动")).toHaveValue("");
     await expect(page.getByRole("status")).toContainText(`已选择 ${id}`);
@@ -67,6 +69,7 @@ test("完整流程、七项状态、ABC 和自由行动、五个底部页面", a
   await expect(page.getByRole("status")).toContainText("自由行动已收到");
   await expect(page.getByRole("heading", { name: "门后的脚步声", exact: true })).toBeVisible();
   await expect(page.getByLabel("上一轮选择")).toContainText("上一轮选择：A");
+  await expect(page.getByLabel("Event Engine 选中的 Mock 事件")).toBeVisible();
   expect(await stats.innerText()).toEqual(initialStats);
   await noOverflow(page);
   await page.locator(".site-header").scrollIntoViewIfNeeded();
