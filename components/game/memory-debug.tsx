@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { memoryTestFixtures } from "@/config/history-fixtures";
 import { getRecentMemories, getRelevantMemories, isMemoryVisibleTo } from "@/game/memoryEngine";
 import { useGameStore } from "@/store/game-store";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import type { EntityId, ScoredMemory } from "@/types/memory";
 
 export function MemoryDebug() {
@@ -23,7 +24,7 @@ export function MemoryDebug() {
     { id: "npc:manager" as EntityId, label: "Manager" },
   ] : [], [gameState]);
 
-  if (process.env.NODE_ENV !== "development" || !gameState) return null;
+  if (!DEBUG_MODE_ENABLED || !gameState) return null;
 
   const hiddenManagerMemory = memories.find((memory) =>
     memory.type === "hidden" && memory.knownBy.includes("npc:manager"));

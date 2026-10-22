@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/store/game-store";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import { GAME_SAVE_SCHEMA_VERSION } from "@/types/save";
 
 function formatTimestamp(value: string | null): string {
@@ -9,7 +10,7 @@ function formatTimestamp(value: string | null): string {
 
 export function SaveSystemDebug() {
   const state = useGameStore();
-  if (process.env.NODE_ENV !== "development" || !state.gameState) return null;
+  if (!DEBUG_MODE_ENABLED || !state.gameState) return null;
 
   return <section className="engine-debug-block save-debug-block" aria-label="Save System Debug">
     <h3>Save System</h3>

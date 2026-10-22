@@ -1,6 +1,7 @@
 "use client";
 
 import { useGameStore } from "@/store/game-store";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 
 function token(value: number | null): string | number {
   return value ?? "unavailable";
@@ -10,7 +11,7 @@ export function TurnTraceDebug() {
   const status = useGameStore((state) => state.turnStatus);
   const trace = useGameStore((state) => state.lastTurnTrace);
   const badcases = useGameStore((state) => state.aiBadcases);
-  if (process.env.NODE_ENV !== "development") return null;
+  if (!DEBUG_MODE_ENABLED) return null;
 
   return <section className="engine-debug-block turn-trace-debug" aria-label="Turn Trace Debug">
     <h3>Turn Trace · Phase 5C</h3>

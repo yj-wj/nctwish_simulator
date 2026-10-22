@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertCircle, Building2, Eye, Hash, Heart, LoaderCircle, MessageCircle, Radio, Repeat2, UsersRound } from "lucide-react";
 import { snsDebugFixtures } from "@/config/sns";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import { useGameStore } from "@/store/game-store";
 import type { SNSAccountType, SNSSentiment } from "@/types/sns";
 
@@ -34,7 +35,7 @@ export function SNSPreview() {
 
   if (!gameState) return null;
   return <>
-    <div className="tab-heading"><p className="eyebrow">PUBLIC OPINION FEED</p><h1>SNS 广场</h1><p>公开事件会在这里形成讨论，并通过正式结算影响故事。</p></div>
+    <div className="tab-heading"><p className="eyebrow">PUBLIC OPINION FEED</p><h1>SNS 广场</h1><p>公开事件会在这里形成讨论，并影响之后的故事。</p></div>
     <div className="feed-layout">
       <div className="sns-feed" aria-live="polite">
         {busy && <div className="paper-panel sns-feed-state"><LoaderCircle className="spin" size={22} /><p>正在整理公开讨论…</p></div>}
@@ -50,9 +51,9 @@ export function SNSPreview() {
           </article>;
         })}
       </div>
-      <aside className="paper-panel feed-note"><p className="eyebrow">SYSTEM DRIVEN</p><h2>当前舆论</h2><p>待处理 Trigger：{triggers.filter(({ status: value }) => value === "pending").length}</p><p>已发布帖子：{posts.length}</p><p className="muted">内容由 AI 撰写；公开条件、状态变化和记忆写入由规则系统处理。</p></aside>
+      <aside className="paper-panel feed-note"><p className="eyebrow">PUBLIC PULSE</p><h2>当前舆论</h2><p>等待更新：{triggers.filter(({ status: value }) => value === "pending").length}</p><p>已发布帖子：{posts.length}</p><p className="muted">只有公开行程、传闻与舆论事件会出现在这里。</p></aside>
     </div>
-    {process.env.NODE_ENV === "development" && <details className="engine-debug sns-debug"><summary>Development · SNS Trigger / Trace</summary><div className="debug-content">
+    {DEBUG_MODE_ENABLED && <details className="engine-debug sns-debug"><summary>Development · SNS Trigger / Trace</summary><div className="debug-content">
       <div className="debug-controls">{snsDebugFixtures.map((fixture) => <button key={fixture.id} onClick={() => enqueueFixture(fixture.id)}>Queue: {fixture.label}</button>)}<button disabled={busy} onClick={() => void processPending()}>Process Pending SNS</button></div>
       {trace ? <><p><strong>Trigger：</strong>{trace.trigger.reason} · {trace.trigger.level}</p><p><strong>Source：</strong>{trace.trigger.sourceEventId ?? trace.trigger.sourceTurnId ?? "system"}</p><p><strong>Posts：</strong>{trace.acceptedPostCount} accepted · {trace.rejectedPosts.length} rejected</p><p><strong>Effects：</strong>{JSON.stringify(trace.appliedEffects)}</p><p><strong>Rule：</strong>{trace.ruleEvaluation.riskLevel} · {trace.ruleEvaluation.warnings.join(", ") || "no warning"}</p><p><strong>Memory：</strong>{trace.memoryWritten ? "written" : "not required"}</p><pre className="ai-json-preview">{JSON.stringify(trace.context, null, 2)}</pre></> : <p>处理一个 SNS Trigger 后显示生成与结算记录。</p>}
     </div></details>}

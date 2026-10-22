@@ -1,55 +1,59 @@
-# Garden · Phase 3A Rule Engine
+# Garden
 
-NCT WISH 平行世界互动剧情 Web Game。当前实现止于 Phase 3A：在 Phase 2 的 Config 与 GameState 之上增加了纯判断、无副作用的 Rule Engine。
+Garden 是一个基于 Next.js 的 AI 互动剧情 Web Game。玩家可以创建成年角色、选择男主，通过 A/B/C 选项或自由行动推进故事，并在同一局游戏中使用消息、SNS、人物档案和本地存档。
 
-## 启动
+## 技术栈
 
-环境要求：Node.js 20.9 或更高版本。
+- Next.js 16、React 19、TypeScript、Tailwind CSS
+- Zustand 状态管理、Zod 数据校验
+- Node Test Runner 单元测试、Playwright 端到端测试
+- Mock 与 Qwen 两种 AI Provider 模式
+
+AI 负责理解玩家行动并生成 Story、Chat 和 SNS 文案；Rule、Event、State、History、Memory、World 与 Ending Engine 负责确定性的规则与状态结算。
+
+## 本地运行
+
+需要 Node.js 20.9 或更高版本。
 
 ```bash
 npm install
+copy .env.example .env.local
 npm run dev
 ```
 
-打开 `http://localhost:3000`。
+打开 `http://localhost:3000`。默认使用 Mock 模式，无需外部 API。
 
-## 验证
+## 环境配置
+
+```ini
+AI_MODE=mock
+DASHSCOPE_API_KEY=
+DASHSCOPE_BASE_URL=
+ACTION_MODEL=qwen3.7-flash
+STORY_MODEL=qwen3.7-plus
+CHAT_MODEL=qwen3.7-plus
+SNS_MODEL=qwen3.7-plus
+RUN_LIVE_AI_TESTS=false
+NEXT_PUBLIC_DEBUG_MODE=false
+```
+
+使用 Qwen 时，将 `AI_MODE` 设为 `qwen`，并只在 `.env.local` 中填写 DashScope API Key、兼容接口地址和模型名。`.env.local` 已被 Git 忽略；不要把真实 Key 写入 `.env.example`。
+
+`NEXT_PUBLIC_DEBUG_MODE=true` 会显示现有 Rule、Event、State、Memory、AI Trace、Save、Chat、SNS 与 World 调试界面；设为 `false` 或不设置时隐藏。该变量只控制 Debug UI 是否渲染，不参与游戏状态或 AI 调用。
+
+自动测试应保持 `RUN_LIVE_AI_TESTS=false`，避免消耗真实 Qwen API。
+
+## 检查与构建
 
 ```bash
-npm run typecheck
 npm run test:unit
+npm run typecheck
 npm run build
 npm run test:e2e
 ```
 
-单元测试使用 Node 自带测试能力，不需要额外测试框架。`test:relationship` 覆盖关系阶段边界，`test:rules` 覆盖关系规则、特殊触发、越界行为、人物雷区与无副作用要求。
+生产预览：
 
-## Phase 2 数据层
-
-- `config/characters/`：六名可攻略角色的独立完整配置。
-- `config/identities.ts`：八种玩家身份，包括自定义入口。
-- `config/fan-levels.ts`：五档追星程度。
-- `config/game-modes.ts`：四种剧情节奏；尚未实现事件权重。
-- `config/relationship-stages.ts`：七个关系阶段及允许、禁止和典型互动。
-- `config/initial-state.ts`：原始设定中的初始范围和开局示例值。
-- `types/`：Player、Character、GameState、GameStats、RelationshipStage、NPCType、EventCategory 等领域类型。
-- `game/create-initial-game-state.ts`：从角色创建结果建立初始 `GameState`。
-- `game/relationship.ts`：从 `affection` 唯一派生关系阶段。
-- `store/game-store.ts`：角色创建、GameState 和 Phase 1 交互预览共用的 Zustand Store。
-
-## Phase 3A Rule Engine
-
-- `types/rules.ts`：结构化玩家动作、互动级别、风险、警告、违规、触发条件和评估结果类型。
-- `config/relationship-rules.ts`：七段关系对应的机器可读互动级别和可接受动作类型。
-- `config/special-trigger-rules.ts`：六条特殊触发阈值。
-- `game/ruleEngine.ts`：关系规则、越界判断、风险、特殊触发与角色雷区匹配 API。
-
-`allowed: false` 只表示行动超出当前叙事边界；`canAttempt` 始终为 `true`。Rule Engine 不拦截自由行动，也不修改 GameState。
-
-开发环境中的游戏主界面会显示轻量 `Phase 3A Debug` 控件，可快速把好感度调整为 10、20、40、60、70、85、95，并观察当前关系规则与已满足的特殊触发。生产构建不会显示该控件。
-
-## 当前边界
-
-Phase 1 的三段固定 Mock 剧情、消息和 SNS 展示仍保留。A/B/C 不结算数值，也不推进周数。项目尚未接入 Event Engine、State Engine、Ending Engine、Structured Memory、LLM 或真正的 Chat/SNS 逻辑。
-
-Store 只做 Phase 2 所需的轻量浏览器持久化，用于防止页面导航或刷新造成创建信息与 GameState 冲突；多存档、继续游戏和删除存档仍属于后续阶段。
+```bash
+npm run start
+```

@@ -3,6 +3,7 @@
 import { getNPC } from "@/config/npcs";
 import { buildWorldContext } from "@/game/worldContextBuilder";
 import { useGameStore } from "@/store/game-store";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import type { WorldTriggerType } from "@/types/world";
 
 const fixtureTypes: WorldTriggerType[] = [
@@ -12,7 +13,7 @@ const fixtureTypes: WorldTriggerType[] = [
 
 export function WorldDebug() {
   const state = useGameStore();
-  if (process.env.NODE_ENV !== "development" || !state.gameState) return null;
+  if (!DEBUG_MODE_ENABLED || !state.gameState) return null;
   const context = buildWorldContext({
     gameState: state.gameState, worldState: state.worldState, storyFlags: state.storyFlags,
     eventHistory: state.eventHistory, memories: state.memories, viewerId: "player",

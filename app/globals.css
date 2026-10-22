@@ -199,3 +199,13 @@ button { transition: background-color .18s, border-color .18s, transform .18s; }
 @media (max-width: 370px) { .steps { gap: 12px; }.steps small { font-size: 8px; }.field-grid { grid-template-columns: 1fr; }.pace-grid { grid-template-columns: 1fr; }.character-grid { gap: 12px; }.character-visual { height: 155px; }.character-visual strong { font-size: 80px; }.visual-orbit { width: 120px; height: 120px; }.stat-item { padding: 12px 7px; }.stat-label { font-size: 8px; }.stat-item > strong { font-size: 21px; }.hero-copy h1 { font-size: 30px; }.story-paper { padding: 20px 16px; }.story-paper h1 { font-size: 21px; } }
   @media (max-width: 760px) { .debug-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }.event-debug-summary, .ai-context-counts, .ai-provider-status { grid-template-columns: 1fr 1fr; }.debug-summary { flex-direction: column; }.mock-event-card { grid-template-columns: 1fr; }.engine-debug-controls, .memory-retrieval-controls { grid-template-columns: 1fr; }.state-change-preview { grid-template-columns: 1fr; }.state-change-preview > p { grid-column: 1; }.state-snapshot { grid-template-columns: repeat(2, 1fr); }.ending-metrics, .ending-flags { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *:before, *:after { transition: none !important; animation: none !important; } }
+
+/* Final responsive safeguards for user-generated and AI-generated content. */
+.story-paper, .conversation, .sns-feed, .person-card, .archive-card { min-width: 0; }
+.story-choice, .chat-bubble, .post-text, .person-card { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .game-shell { overflow-x: clip; }
+  .people-grid { grid-template-columns: 1fr; }
+  .lead-card { grid-column: auto; }
+  .free-action-footer { flex-wrap: wrap; }
+}

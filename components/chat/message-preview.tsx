@@ -3,6 +3,7 @@
 import { FormEvent, useEffect } from "react";
 import { MessageCircle, Send, UserRound } from "lucide-react";
 import { getCharacter } from "@/config/characters";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import { incomingMessageFixtures } from "@/config/chat";
 import { getChatThreadId } from "@/game/chatEngine";
 import { useGameStore } from "@/store/game-store";
@@ -59,7 +60,7 @@ export function MessagePreview() {
         {error && <p className="chat-error" role="alert">{error}</p>}
       </div>
     </section>
-    {process.env.NODE_ENV === "development" && <details className="engine-debug chat-debug"><summary>Development · Chat Context / Turn Trace</summary><div className="debug-content">
+    {DEBUG_MODE_ENABLED && <details className="engine-debug chat-debug"><summary>Development · Chat Context / Turn Trace</summary><div className="debug-content">
       <div className="debug-controls">{incomingMessageFixtures.map((fixture) => <button key={fixture.id} onClick={() => enqueueFixture(fixture.id)}>Queue: {fixture.label}</button>)}</div>
       {trace ? <><div className="ai-context-counts"><p><b>{trace.context.context.gameState.relationshipStage}</b><small>relationshipStage</small></p><p><b>{trace.context.context.diagnostics.recentMessagesCount}</b><small>recent messages</small></p><p><b>{trace.context.context.diagnostics.relevantMemoriesCount}</b><small>relevant memories</small></p><p><b>{trace.context.context.diagnostics.excludedHiddenMemories}</b><small>excluded hidden</small></p></div>
         <p><strong>Story Facts：</strong>{trace.context.context.storyFacts.join(", ") || "none"}</p><p><strong>Rule：</strong>{trace.ruleEvaluation.riskLevel} · {trace.ruleEvaluation.violatedRules.join(", ") || "no violation"}</p><p><strong>AI Reply：</strong>{trace.output.messages.join(" / ")}</p><p><strong>Settlement：</strong>{JSON.stringify(trace.proposal.appliedEffects)} · spamLimited={String(trace.proposal.spamLimited)}</p><p><strong>Memory：</strong>{trace.proposal.memoryEffectsCount} accepted · {trace.proposal.rejectedMemories.length} rejected</p><pre className="ai-json-preview">{JSON.stringify(trace.context, null, 2)}</pre></> : <p>完成一次聊天后显示 Context 与 Trace。</p>}

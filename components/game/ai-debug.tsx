@@ -10,6 +10,7 @@ import type { AIRequestMetadata } from "@/ai/provider";
 import type { ActionInterpretationOutput, StoryGenerationOutput } from "@/ai/schemas";
 import { AIClientError, generateStoryWithServer, getAIStatus, interpretActionWithServer, type PublicAIStatus } from "@/ai/client";
 import { useGameStore } from "@/store/game-store";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 import type { EntityId } from "@/types/memory";
 
 export function AIDebug() {
@@ -51,11 +52,11 @@ export function AIDebug() {
   }) : null, [currentEvent, eventHistory, gameState, memories, storyFlags]);
 
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
+    if (!DEBUG_MODE_ENABLED) return;
     getAIStatus().then((next) => { setStatus(next); setStatusError(""); }).catch((error) => setStatusError(error instanceof Error ? error.message : "Unable to read AI status."));
   }, []);
 
-  if (process.env.NODE_ENV !== "development" || !gameState || !input) return null;
+  if (!DEBUG_MODE_ENABLED || !gameState || !input) return null;
 
   const generate = async () => {
     setBusy("mock");

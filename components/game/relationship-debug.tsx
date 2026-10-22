@@ -16,6 +16,7 @@ import { AIDebug } from "./ai-debug";
 import { TurnTraceDebug } from "./turn-trace-debug";
 import { WorldDebug } from "./world-debug";
 import { buildEventWorldContext } from "@/game/worldContextBuilder";
+import { DEBUG_MODE_ENABLED } from "@/config/debug";
 
 const checkpoints = [10, 20, 40, 60, 70, 85, 95] as const;
 const debugStats: { id: StatId; label: string; max: number }[] = [
@@ -56,13 +57,13 @@ export function RelationshipDebug() {
   const setDebugWeek = useGameStore((state) => state.setDebugWeek);
   const generate = useGameStore((state) => state.generateNextMockEvent);
   const previewResult = useMemo(
-    () => process.env.NODE_ENV === "development" && gameState
+    () => DEBUG_MODE_ENABLED && gameState
       ? runEventEngine(gameState, { history: eventHistory, seed: eventSeed, world: buildEventWorldContext({ gameState, worldState, storyFlags, eventHistory, memories, chatTurns, snsPosts, snsTriggers }) })
       : null,
     [eventHistory, eventSeed, gameState, worldState, storyFlags, memories, chatTurns, snsPosts, snsTriggers],
   );
 
-  if (process.env.NODE_ENV !== "development" || !gameState) return null;
+  if (!DEBUG_MODE_ENABLED || !gameState) return null;
 
   const relationshipRule = getRelationshipRule(gameState);
   const matchedTriggers = getMatchedTriggers(gameState);

@@ -63,7 +63,6 @@ export function StoryPanel() {
   return <div className="story-layout"><article className="paper-panel story-paper">
     <div className="story-kicker"><span><Feather size={15} /> {story.sourceLabel}</span><span>{story.time}</span></div>
     <h1 ref={titleRef} tabIndex={-1}>{story.title}</h1><p className="story-deck">{story.subtitle}</p>
-    <p className="reference-note">Phase 5C · A/B/C 与自由行动均通过 Rule → AI → State / History / Memory → Auto Save 完整链路。</p>
     {previousChoice && <p className="reference-note" aria-label="上一轮选择">上一轮选择：{previousChoice.id} · {previousChoice.text}</p>}
     {selectedEvent && <section className="mock-event-card" aria-label="Event Engine 选中的事件"><span>{selectedEvent.category}</span><div><small>EVENT ENGINE · NEXT EVENT</small><h2>{selectedEvent.title}</h2><p>{selectedEvent.description}</p></div></section>}
     <div className="story-divider"><span>✳</span></div>
@@ -78,7 +77,6 @@ export function StoryPanel() {
     <aside className="story-sidebar"><section className="paper-panel companion-card"><div className="aside-heading"><span>这次相遇的人</span><span>01</span></div><CharacterVisual character={character} /><div className="companion-copy"><p className="eyebrow">{character.displayName.toUpperCase()}</p><h2>{character.name}</h2><p>{character.subtitle}</p><Link href="/game/characters">查看人物档案 <ArrowUpRight size={15} /></Link></div></section>
       <section className="scene-card"><NightGarden compact /><div><p className="eyebrow">SOMEWHERE IN SEOUL</p><p><MapPin size={14} />{gameState?.currentScene ?? "首尔汝矣岛电视台后门"}</p></div></section>
       <p className="margin-note">“你仍然有自己的生活，<br />他也仍然属于舞台。”<span>GARDEN · 故事的另一面</span></p>
-      <p className="reference-note">开局保留原文模板；完成一次选择后显示经过 Schema 与规则验证的 AI / Mock Provider 剧情。</p>
     </aside>
   </div>;
 }
